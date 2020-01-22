@@ -1,0 +1,36 @@
+version: '3'
+
+services:
+
+  # mqtt broker. Comment/remove this section if you are using your own broker and modify .env file
+  mosquitto:
+    build: mosquitto
+    restart: always
+    network_mode: host
+    env_file:
+      - ./config
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    logging:
+      driver: "${LOGGING_DRIVER}"
+
+  # loxone -> mqtt uses loxone web interface to get value changes
+  loxone2mqtt:
+    network_mode: host
+    build: loxone2mqtt
+    restart: always
+    env_file:
+      - ./config
+    logging:
+      driver: "${LOGGING_DRIVER}"
+
+  # mqtt -> loxone uses udp packets to send values from mqtt to loxone
+  mqtt2loxone:
+    network_mode: host
+    build: mqtt2loxoneudp
+    restart: always
+    env_file:
+      - ./config
+    logging:
+      driver: "${LOGGING_DRIVER}"

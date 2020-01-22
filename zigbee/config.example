@@ -1,0 +1,21 @@
+
+# mqtt broker address. If you are using another mqtt broker than embedded one, specify its address (and remove mqtt broker section from bridge.yml)
+MQTT_HOST=localhost
+
+# mqtt broker port. Default 1883
+MQTT_PORT=1883
+
+# mqtt prefix for messages coming from loxone to mqtt
+LOXONE_TO_MQTT_TOPIC=lox_out
+
+# mqtt topic which will be send to loxone as udp packet
+MQTT_TO_LOXONE_TOPIC=lox_in
+
+# name of category in loxone config which is used for zigbee output from loxone
+LOXONE_ZIGBEE_CATEGORY=zigbee_out
+
+# zigbee2mqtt topic
+ZIGBEE2MQTT_TOPIC=zigbee
+
+# set to 1 if you want to see debug messages
+DEBUG=0

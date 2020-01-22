@@ -1,0 +1,22 @@
+    {
+    "winston": [{
+        "Console": {
+            "level": "info",
+            "colorize": true,
+            "timestamp": true
+        }
+    }],
+    "mqtt": {
+        "host": "mqtt://${MQTT_HOST}:${MQTT_PORT}",
+        "options": {
+            "clientId": "nodelox-gw"
+        }
+    },
+    "miniserver": {
+        "host": "${LOXONE_ADDRESS}:80",
+        "username": "${LOXONE_USERNAME}",
+        "password": "${LOXONE_PASSWORD}",
+        "mqtt_prefix": "${LOXONE_TO_MQTT_TOPIC}",
+        "readonly": false
+    }
+}

@@ -1,0 +1,31 @@
+version: '3'
+
+services:
+
+    # zigbee to mqtt bridge
+    zigbee2mqtt:
+        build: zigbee2mqtt
+        network_mode: host
+        restart: always
+        volumes:
+            - ./zigbee2mqtt/data:/app/data
+            - ./zigbee2mqtt/configuration.yaml.template:/configuration.yaml.template:ro
+            - /run/udev:/run/udev:ro
+        devices:
+            - /dev/ttyACM0:/dev/ttyACM0
+        privileged: true
+        env_file:
+            - ./config
+        logging:
+            driver: "${LOGGING_DRIVER}"
+
+    # mqtt zigbee to mqtt loxone gateway
+    loxone_zigbee_gateway:
+        network_mode: host
+        build: loxone_zigbee_gateway
+        restart: always
+        env_file:
+            - ./config
+        logging:
+            driver: "${LOGGING_DRIVER}"
+
