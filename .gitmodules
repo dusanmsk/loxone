@@ -1,0 +1,3 @@
+[submodule "bridge/loxone2mqtt/node-lox-mqtt-gateway"]
+	path = bridge/loxone2mqtt/node-lox-mqtt-gateway
+	url = https://github.com/dusanmsk/node-lox-mqtt-gateway.git

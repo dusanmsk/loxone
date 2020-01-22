@@ -1,0 +1,18 @@
+permit_join: false
+homeassistant: false
+mqtt:
+  base_topic: ${ZIGBEE2MQTT_TOPIC}
+  server: 'mqtt://${MQTT_HOST}'
+  # user: my_user
+  # password: my_password
+
+serial:
+  port: /dev/ttyACM0
+
+devices: devices.yaml
+
+advanced:
+  cache_state: false
+  log_directory: /tmp/zigbee2mqtt/
+  network_key: [1, 2, 3, 4, 5, 6, 77, 88, 99, 98, 67, 66, 65, 64, 63, 92]
+
