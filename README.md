@@ -13,6 +13,7 @@ and sends them to mqtt topic "lox_out". It also sends mqtt messages from topic '
 
 Initialize submodules:
 
+    git submodule init
     git submodule update
     
 Install docker and docker-compose.    
