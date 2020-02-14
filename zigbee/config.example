@@ -17,5 +17,7 @@ LOXONE_ZIGBEE_CATEGORY=zigbee_out
 # zigbee2mqtt topic
 ZIGBEE2MQTT_TOPIC=zigbee2mqtt
 
+ZIGBEE_TO_LOXONE_VALUE_MAP=true:1,false:0,on:1,off:0,open:1,closed:0
+
 # set to 1 if you want to see debug messages
 DEBUG=0

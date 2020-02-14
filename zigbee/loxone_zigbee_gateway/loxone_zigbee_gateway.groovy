@@ -56,6 +56,10 @@ class LoxoneZigbeeGateway {
     def LOXONE_ZIGBEE_CATEGORY = System.getenv("LOXONE_ZIGBEE_CATEGORY")
     def LOXONE_TO_MQTT_TOPIC = System.getenv("LOXONE_TO_MQTT_TOPIC")
     def MQTT_TO_LOXONE_TOPIC = System.getenv("MQTT_TO_LOXONE_TOPIC")
+    def ZIGBEE_TO_LOXONE_VALUE_MAP = System.getenv("ZIGBEE_TO_LOXONE_VALUE_MAP")
+
+    def VALUE_MAP_FORWARD = [:]
+    def VALUE_MAP_BACKWARD = [:]
 
 
     def slurper = new JsonSlurper()
@@ -97,6 +101,7 @@ class LoxoneZigbeeGateway {
         assert LOXONE_TO_MQTT_TOPIC != null
         assert MQTT_TO_LOXONE_TOPIC != null
         assert ZIGBEE2MQTT_TOPIC != null
+        setupValueTranslation()
         setupMqtt()
         loopForever()
     }
@@ -116,6 +121,7 @@ class LoxoneZigbeeGateway {
         def destValue = tmp[-1]
         def jsonObject = slurper.parseText(message)
         def value = jsonObject['value']
+        value = translateValue(value, false)
         def destJson = """{ "${destValue}" : "${value}" }"""
         sendMqtt(destZigbeeTopic, destJson)
     }
@@ -126,6 +132,7 @@ class LoxoneZigbeeGateway {
             def jsonObject = slurper.parseText(message)
             jsonObject.keySet().each { key ->
                 def value = jsonObject[key].toString()
+                value = translateValue(value, true)
                 sendToLoxone("${zigbeeDeviceName}/${key}", value)
             }
         } else {
@@ -154,6 +161,25 @@ class LoxoneZigbeeGateway {
     void loopForever() {
         while(true) {
             Thread.sleep(Long.MAX_VALUE);
+        }
+    }
+
+    /**
+     * @param value
+     * @param direction true if translating from zigbee to loxone
+     */
+    def translateValue(value, boolean direction) {
+        def aMap = direction ? VALUE_MAP_FORWARD : VALUE_MAP_BACKWARD
+        return value in aMap ? aMap[value] : value
+    }
+
+    def setupValueTranslation() {
+        if(ZIGBEE_TO_LOXONE_VALUE_MAP != null) {
+            ZIGBEE_TO_LOXONE_VALUE_MAP.toString().split(',').each { i->
+                def splt = i.split(":")
+                VALUE_MAP_FORWARD[splt[0]] = splt[1]
+                VALUE_MAP_BACKWARD[splt[1]] = splt[0]
+            }
         }
     }
 }
