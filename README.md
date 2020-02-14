@@ -32,7 +32,7 @@ Try to start bridge:
 Check logs, you should see receiving mqtt messages from loxone. If ok, optionally disable debug and set logging driver
 to none in .env file (especially if you are running on sdcard or similar piece of crap). Then run bridge on background:
 
-    ./run -d
+    ./run.sh -d
     
     
 ## Zigbee
