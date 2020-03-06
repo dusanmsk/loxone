@@ -1,4 +1,4 @@
-FROM openjdk:13-alpine
+FROM adoptopenjdk:13-hotspot
 
 RUN mkdir /app
 COPY download/manager-app.jar /app/
