@@ -1,2 +1,2 @@
 #!/bin/sh
-java -jar /app/manager-app.jar
+java -Dvaadin.productionMode=true -jar /app/manager-app.jar

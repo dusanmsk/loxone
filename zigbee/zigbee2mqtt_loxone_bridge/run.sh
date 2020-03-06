@@ -1,2 +1,2 @@
 #!/bin/sh
-java -jar /app/loxone-app.jar
+java -Dvaadin.productionMode=true -jar /app/loxone-app.jar
