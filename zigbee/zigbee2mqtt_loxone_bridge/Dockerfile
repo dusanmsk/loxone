@@ -1,4 +1,4 @@
-FROM openjdk:13-alpine
+FROM adpotopenjdk:13-hotspot
 
 RUN mkdir /app
 COPY download/loxone-app.jar /app/
