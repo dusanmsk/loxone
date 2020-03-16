@@ -19,3 +19,7 @@ ZIGBEE2MQTT_TOPIC=zigbee2mqtt
 
 # set to 1 if you want to see debug messages
 DEBUG=0
+
+# set to none to disable logging at all (sdcard write protection), or use local, syslog, journald or let it commented out for platform default
+# LOGGING_DRIVER=none
+

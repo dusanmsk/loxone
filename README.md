@@ -4,19 +4,84 @@ Purpose:
 
 Misc loxone stuff such as mqtt bridge, grafana, zigbee etc ...
 
+## Quickstart for impatient
+
+- you know how to create udp inputs in loxone
+- you already have custom flashed zigbee usb token (https://www.zigbee2mqtt.io/) 
+
+Install docker, docker-compose, git. Should be as simple as:
+
+    sudo -i
+    curl -sSL https://get.docker.com | sh
+    apt-get install docker.io docker-compose git wget
+
+but check your distro documentation.
+
+Then clone and initialize this repo:
+
+    git clone https://github.com/dusanmsk/loxone.git
+    cd loxone
+    git submodule init
+    git submodule update
+
+## MQTT bridge
+    
+Configure mqtt bridge. Bridge is core part of all components in this repo. Bridge is responsible for loxone<-->mqtt communication.
+
+Create dedicated user in loxone for this gateway and new virtual udp input. Then create config file from example and edit what is necessary
+(mostly loxone address, username, password and udp port number. Let other settings untouch (or set DEBUG=1 until everything will work, then set it back to 0)).
+
+    cd bridge
+    cp config.example config
+    <YOUR EDITOR> config
+
+
+Now start the bridge in foreground mode:
+
+    ./run.sh
+
+You should see something like
+    
+    loxone2mqtt_1  | {"message":"Loxone to MQTT gateway started","level":"info"}
+    mqtt2loxone_1  | 441 [main] INFO MqttToLoxoneUDP - Connected to mqtt tcp://localhost:1883 and ready         
+
+
+## Zigbee
+
+Let it run in foreground, open another terminal (screen,tmux,byobu, ...) and go to zigbee folder. Create config from example (probably you don't need to modify anything if you didn't touch topic names in gateway config):
+
+    cd ../zigbee
+    cp config.example config
+    
+Build all containers (it will download required stuff):
+
+    ./build.sh
+    
+If everything is ok, run zigbee stuff in foreground:
+
+    ./run.sh
+    
+Now open web browser and go to port 8881 (you should change it in docker-compose.yml file).
+
+TODO describe app ui
+
+        
+
+
+# More detailed info
+
 ## Architecture
 
 Everything is based on mqtt so you need to configure and run bridge first. Bridge then receive value changes from loxone web interface
-and sends them to mqtt topic "lox_out". It also sends mqtt messages from topic 'lox_in' to loxone as udp text messages.
+(using node-lox-mqtt-gateway) and sends them to mqtt topic "lox_out". It also sends mqtt messages received from topic 'lox_in' to loxone as udp text messages.
 
-## How to start:
+## Zigbee
 
-Initialize submodules:
+Project is meant as follow-up to https://www.zigbee2mqtt.io/.
 
-    git submodule init
-    git submodule update
-    
-Install docker and docker-compose.    
+# OLD obsolete stuff - to be removed
+
+
     
 ## Bridge    
 
@@ -37,7 +102,9 @@ to none in .env file (especially if you are running on sdcard or similar piece o
     
 ## Zigbee
 
-Project is meant as follow-up to https://www.zigbee2mqtt.io/.
+Project is meant as follow-up to https://www.zigbee2mqtt.io/. Read original documentation to be familiar with zigbee2mqtt.
+Zigbee2mqttManager is simple web application that is able to manage zigbee2mqtt bridge - especially to list connected zigbee devices,
+enable/disable joining, device renaming. Second part of this module is a bridge between loxone and zigbee. 
 
 ##### What you should already know before you start:
 - you know how to create udp inputs in loxone
@@ -53,7 +120,7 @@ TODO describe basic workflow with zigbee, how to enable joining and rename devic
 
 # How it works
 
-Zigbee2mqtt receives zigbee messages from zigbee devices and sends them to mqtt topic 'zigbee'.
+Zigbee2mqtt module receives messages from zigbee devices and sends them to mqtt topic 'zigbee2mqtt'.
 Loxone_zigbee_gateway listens for that topics and extracts all data coming from zigbee device,
 mapping it to udp messages which are then sent to loxone miniserver.
 
@@ -96,33 +163,18 @@ Example:
 Analog virtual output named "led1_set_brightness" with category "zigbee_out" will be sent to mqtt topic "zigbee/led1/set" with payload { "brightness" : VALUE }.
 Zigbee2mqtt will send that brightness command to zigbee device named "led1".
 
+#### Debugging
 
-## Pairing using android phone
+You should use any mqtt client to monitor mqtt traffic and see if everything is going ok. For example MQTT Explorer, which shows all
+traffic.
 
-If you don't want to use you laptop everytime you need to pair new device, you should use any mqtt dashboard application capable
-to receive and send messages. Here is quick howto for android 'mqtt dashboard' app:
+In fully working enviroment, there must be some messages in topics:
 
-- click on (+) in bottom right corner
-- Client ID: whatever you want
-- Server: your mqtt server address
-- Port: usually 1883
-- click CREATE
-- in Subscribe section
-    - create listener for logs (mqtt address zigbee/bridge/log)
-- in Publish section
-    - create new switch, name "Permit join", topic zigbee/bridge/config/permit_join, text on/off, publish value true/false
-    - create new text, name "Rename last", topic zigbee/bridge/config/rename_last
-    
-Now connect to mqtt server, go to publish, switch pairing on. Check for logs in subscribe section that bridge confirmed
-that pairing is on (message will ends with permit_join:true). Then you should start pairing the zigbee device
-and see result of pairing in subscribe/logs directly on your mobile phone.
+- zigbee2mqtt
+- lox_in (if using loxone mapping, you will see messages going from )
+- lox_out (if using loxone mapping, there must be 1:1 picture in mqtt messages of what you see in loxone web interface)
 
-After the device is successfully paired, you should rename it to some friendly name using
-publish/rename last event. Simply write new name and publish it directly after pairing is done.    
-And that's all.
-
-#### TODO debugging
-
+You also should check zigbee2mqtt/bridge/logs for more info about zigbee bridge.
 
 
 ## Grafana
