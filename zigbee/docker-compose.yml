@@ -24,9 +24,12 @@ services:
         build: zigbee2mqtt_manager
         network_mode: host
         restart: always
+        volumes:
+            - ./settings.json:/settings.json
         env_file:
             - ./config
         environment:
           SERVER_PORT: 8881
+          SETTINGS_JSON: /settings.json
         logging:
             driver: "${LOGGING_DRIVER}"
