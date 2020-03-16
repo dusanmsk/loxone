@@ -30,18 +30,3 @@ services:
           SERVER_PORT: 8881
         logging:
             driver: "${LOGGING_DRIVER}"
-
-    # zigbee2mqtt to loxone bridge
-    zigbee2mqtt_loxone_bridge:
-        build: zigbee2mqtt_loxone_bridge
-        network_mode: host
-        restart: always
-        volumes:
-            - ./zigbee2mqtt_loxone_bridge/settings.json:/settings.json
-        env_file:
-            - ./config
-        environment:
-            SERVER_PORT: 8882
-        logging:
-            driver: "${LOGGING_DRIVER}"
-
