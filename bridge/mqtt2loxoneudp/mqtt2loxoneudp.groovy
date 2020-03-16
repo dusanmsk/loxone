@@ -39,8 +39,6 @@ import org.eclipse.paho.client.mqttv3.MqttMessage
 @Slf4j
 class MqttToLoxoneUDP {
 
-    def RECONNECT_TIME_SEC = 30
-
     def LOXONE_ADDRESS = System.getenv("LOXONE_ADDRESS")
     def LOXONE_UDP_PORT = System.getenv("LOXONE_UDP_PORT") as Integer
     def MQTT_HOST = System.getenv("MQTT_HOST")
@@ -62,7 +60,10 @@ class MqttToLoxoneUDP {
 
         mqttClient.setCallback(new MqttCallback() {
             @Override
-            void connectionLost(Throwable throwable) {}
+            void connectionLost(Throwable throwable) {
+                log.error("Mqtt connection lost, exiting")
+                System.exit(1);     // must be restarted by docker-compose
+            }
 
             @Override
             void messageArrived(String topic, MqttMessage mqttMessage) {
@@ -79,7 +80,7 @@ class MqttToLoxoneUDP {
 
     }
 
-    def run() {
+    def run() throws Exception {
 
         assert LOXONE_ADDRESS != null
         assert LOXONE_UDP_PORT != null
@@ -87,16 +88,13 @@ class MqttToLoxoneUDP {
         assert MQTT_PORT != null
         assert MQTT_TO_LOXONE_TOPIC != null
 
-        while (true) {
-            try {
-                setupMqtt()
-            } catch (Exception e) {
-                log.error("Exception caught", e)
-            } finally {
-                log.info("Sleeping for ${RECONNECT_TIME_SEC} seconds ...")
-                Thread.sleep(1000 * RECONNECT_TIME_SEC)
-            }
+        try {
+            setupMqtt()
+        } catch (Exception e) {
+            log.error("Exception caught", e)
+            throw e
         }
+        Thread.sleep(Long.MAX_VALUE)
     }
 
     def processMessage(topic, message) {
