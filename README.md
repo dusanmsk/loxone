@@ -60,12 +60,38 @@ Build all containers (it will download required stuff):
 If everything is ok, run zigbee stuff in foreground:
 
     ./run.sh
+
+
+### zigbee web management
     
 Now open web browser and go to port 8881 (you should change it in docker-compose.yml file).
 
-TODO describe app ui
+Main windows is used to list, pair and rename zigbee devices. Click on "Enable". Now try to pair new zigbee device.
+Now click on 'Refresh' button to see if device was sucessfully paired.
 
-        
+Zigbee logs should give more detailed info what is going on. It listens and show all zigbee mqtt messages.
+
+To translate values coming from zigbee to loxone (for example translating "true" and "false" coming from xiaomi door contact)
+to loxone understandable values (for example 1 or 0), click on Edit button. Now open and close door so manager will receive
+messages from zigbee device. Click on Refresh. You will see all zigbee device messages received in last period of time.
+Click on value you want to remap, now fill new value to "Map to:" textfield and click on "Create mapping".
+When done, click on 'Save' button. 
+
+## Backup and restore
+
+#### bridge
+
+Do backup of 'config' file.
+
+#### zigbee
+
+Do backup of 'config' and 'settings.json' file
+Do backup (as root) of zigbee2mqtt/data directory.
+
+
+## Upgrading
+
+TODO
 
 
 # More detailed info
@@ -79,7 +105,7 @@ Everything is based on mqtt so you need to configure and run bridge first. Bridg
 
 Project is meant as follow-up to https://www.zigbee2mqtt.io/.
 
-# OLD obsolete stuff - to be removed
+# OLD obsolete stuff - to be removed, do not read below this line
 
 
     
