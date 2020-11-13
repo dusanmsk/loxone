@@ -1,0 +1,50 @@
+
+# Specify what suites you want to run.
+# For example you have another mqtt server runing elsewhere, so remove mosquitto.
+# Or you don't want zigbee and want only loxone<-->mqtt bridge, so remove zigbee. etc...
+ENABLED_SUITES="mosquitto bridge zigbee"
+
+# specify your mqtt broker address. Defaults to embedded 'mosquitto' service.
+MQTT_HOST=mosquitto
+Z2MA_SETTINGS__MQTTSERVER=mosquitto
+
+# mqtt broker port. Default 1883
+MQTT_PORT=1883
+
+# loxone address
+LOXONE_ADDRESS=192.168.1.1
+
+# loxone username. You could create special user for mqtt bridge. Remember that bridge see only those loxone elements that user see in web interface.
+LOXONE_USERNAME=foo
+
+# password for loxone user
+LOXONE_PASSWORD=foo
+
+# udp port where specified mqtt messages will be send to
+LOXONE_UDP_PORT=4444
+
+# mqtt prefix for messages coming from loxone to mqtt
+LOXONE_TO_MQTT_TOPIC=lox_out
+
+# mqtt topic which will be send to loxone as udp packet
+MQTT_TO_LOXONE_TOPIC=lox_in
+
+# name of category in loxone config which is used for zigbee output from loxone
+LOXONE_ZIGBEE_CATEGORY=zigbee_out
+
+# zigbee2mqtt topic
+ZIGBEE2MQTT_TOPIC=zigbee2mqtt
+
+# set to 1 if you want to see debug messages
+DEBUG=0
+
+# Z2MA_SETTINGS__MQTTUSERNAME=xxxxx
+# Z2MA_SETTINGS__MQTTPASSWORD=xxxxx
+# Set to your TimeZone when using on Linux https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+# Won't work if you're using the Windows version of the container
+TZ=Europe/Prague
+
+
+# set to none to disable logging at all (sdcard write protection), or use local, syslog, journald or let it commented out for platform default
+# LOGGING_DRIVER=none
+

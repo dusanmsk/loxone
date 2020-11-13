@@ -8,6 +8,7 @@ mqtt:
 
 serial:
   port: /dev/ttyACM0
+  #port: tcp://192.168.17.31:20108
 
 devices: devices.yaml
 
