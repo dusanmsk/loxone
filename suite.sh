@@ -21,12 +21,13 @@ function build() {
 
 
 function run {
- touch data/zigbee2mqtt_manager_settings.json
- docker-compose `enabledComposeFiles` up $1
+  mkdir data
+  touch data/zigbee2mqtt_manager_settings.json
+  docker-compose `enabledComposeFiles` up $1
 }
 
 function stop {
- docker-compose `enabledComposeFiles` down
+  docker-compose `enabledComposeFiles` down
 }
 
 # main
