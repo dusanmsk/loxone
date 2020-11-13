@@ -1,0 +1,21 @@
+version: '3'
+
+services:
+
+  # loxone -> mqtt uses loxone web interface to get value changes
+  loxone2mqtt:
+    build: bridge/loxone2mqtt
+    restart: unless-stopped
+    env_file:
+      - config
+    logging:
+      driver: "${LOGGING_DRIVER}"
+
+  # mqtt -> loxone uses udp packets to send values from mqtt to loxone
+  mqtt2loxone:
+    build: bridge/mqtt2loxoneudp
+    restart: unless-stopped
+    env_file:
+      - config
+    logging:
+      driver: "${LOGGING_DRIVER}"

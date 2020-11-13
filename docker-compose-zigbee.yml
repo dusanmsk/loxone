@@ -1,0 +1,44 @@
+version: '3'
+
+services:
+
+    # zigbee to mqtt bridge
+    zigbee2mqtt:
+        build: zigbee/zigbee2mqtt
+        restart: unless-stopped
+        volumes:
+            - ./data/zigbee2mqtt:/app/data
+            - ./zigbee/zigbee2mqtt/configuration.yaml.template:/configuration.yaml.template:ro
+            - /run/udev:/run/udev:ro
+        devices:
+            - /dev/ttyACM0:/dev/ttyACM0
+        privileged: true
+        env_file:
+            - config
+        logging:
+            driver: "${LOGGING_DRIVER}"
+
+    # zigbee2mqtt manager
+    zigbee2mqtt_manager:
+        build: zigbee/zigbee2mqtt_manager
+        restart: unless-stopped
+        volumes:
+            - ./data/zigbee2mqtt_manager_settings.json:/settings.json
+        env_file:
+            - config
+        environment:
+          SETTINGS_JSON: /settings.json
+        logging:
+            driver: "${LOGGING_DRIVER}"
+        ports:
+            - 8881:8080
+
+
+    zigbee2mqttAssistant:
+        image: carldebilly/zigbee2mqttassistant
+        container_name: zigbee2mqttAssistant
+        restart: unless-stopped
+        env_file:
+            - config
+        ports:
+            - 8882:80

@@ -1,12 +1,15 @@
-FROM alpine
+FROM node:12-alpine
 
-RUN apk update && apk add nodejs nodejs-npm gettext bash
+#RUN apt-get update && apt-get install -f wget bash git gettext-base         # debian
+RUN apk update && apk add wget bash git gettext                              # alpine
+
 RUN npm config set user 0; npm config set unsafe-perm true
 
-COPY node-lox-mqtt-gateway /tmp/nodelox
+RUN cd /tmp && git clone https://github.com/dusanmsk/node-lox-mqtt-gateway.git nodelox
 RUN cd /tmp/nodelox && npm -g install
 
 COPY default.json.template /
-COPY run.sh /
+COPY run.sh /run.sh
+RUN  chmod a=rx /run.sh
 
-CMD [ "/bin/bash", "/run.sh" ]
+CMD [ "/bin/sh", "/run.sh" ]

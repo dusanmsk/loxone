@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+
+  mosquitto:
+    build: mosquitto
+    restart: unless-stopped
+    env_file:
+      - config
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    logging:
+      driver: "${LOGGING_DRIVER}"
+
