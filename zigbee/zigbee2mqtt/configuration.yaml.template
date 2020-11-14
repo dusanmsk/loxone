@@ -12,6 +12,12 @@ serial:
 
 devices: devices.yaml
 
+frontend:
+  port: 8080
+experimental:
+  new_api: true
+
+
 advanced:
   cache_state: false
   log_directory: /tmp/zigbee2mqtt/
