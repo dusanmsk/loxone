@@ -17,6 +17,8 @@ services:
             - config
         logging:
             driver: "${LOGGING_DRIVER}"
+        ports:
+            - 8880:8080
 
     # zigbee2mqtt manager
     zigbee2mqtt_manager:
