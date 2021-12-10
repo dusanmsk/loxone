@@ -1,7 +1,7 @@
 FROM node:12-alpine
 
 #RUN apt-get update && apt-get install -f wget bash git gettext-base         # debian
-RUN apk update && apk add wget bash git gettext python make gcc g++                             # alpine
+RUN apk update && apk add wget bash git gettext make gcc g++                             # alpine
 
 RUN npm config set user 0; npm config set unsafe-perm true
 
