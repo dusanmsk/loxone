@@ -1,4 +1,4 @@
-FROM alpine
+FROM alpine:3.13
 
 RUN apk update && apk add mosquitto bash
 COPY entrypoint.sh /
