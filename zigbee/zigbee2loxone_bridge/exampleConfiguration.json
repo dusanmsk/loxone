@@ -1,0 +1,41 @@
+{
+  "mapping": [
+    {
+      "zigbeeDeviceName": "sock_repro_obyv",
+      "l2zPayloadMappings": [
+        {
+          "loxoneTopic": "zb/devel/test_zigbee_tlacitko_1/state",
+          "mappingFormula": "{ \"state\" : \"${payload.active.toUpperCase()}\" }"
+        }
+      ],
+      "z2lPayloadMappings": [
+        {
+          "loxoneTopic": "zb/devel/test_zigbee_tlacitko_1/cmd",
+          "mappingFormula": "${payload.state.toLowerCase()}"
+        }
+      ]
+    },
+    {
+      "zigbeeDeviceName": "aquara_1",
+      "z2lPayloadMappings": [
+        {
+          "loxoneTopic": "zb/devel/test_zigbee_temperature/cmd",
+          "mappingFormula": "${payload.temperature}"
+        },
+        {
+          "loxoneTopic": "zb/devel/test_zigbee_humidity/cmd",
+          "mappingFormula": "${payload.humidity}"
+        }
+      ]
+    },
+    {
+      "zigbeeDeviceName": "bulb_1",
+      "l2zPayloadMappings": [
+        {
+          "loxoneTopic": "zb/devel/devel/state",
+          "mappingFormula": "{ \"brightness\" : \"${payload.value}\" }"
+        }
+      ]
+    }
+  ]
+}
