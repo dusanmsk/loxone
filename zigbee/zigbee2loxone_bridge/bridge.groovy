@@ -4,71 +4,23 @@
 
 import groovy.json.JsonSlurper
 import groovy.util.logging.Slf4j
-import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
-import org.eclipse.paho.client.mqttv3.MqttAsyncClient
-import org.eclipse.paho.client.mqttv3.MqttCallback
-import org.eclipse.paho.client.mqttv3.MqttMessage
+import org.eclipse.paho.client.mqttv3.*
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 
 import java.util.concurrent.CountDownLatch
 
-class Devel {
-    static def exampleConfiguration = [
-        mapping: [
-                [
-                    //loxoneRecvPath: 'zigbee/devel/test_zigbee_tlacitko_1/state',
-                    //l2zMapping: '{ "state" : "${payload.active.toUpperCase()}" }',       // from loxone to zigbee
-                    zigbeeDeviceName: 'sock_repro_obyv',
-                    //loxoneSendPath: ['zigbee/devel/test_zigbee_tlacitko_1/cmd'],
-                    //z2lMapping: ['${payload.state.toLowerCase()}']                         // from zigbee to loxone
-
-                    l2zPayloadMappings: [
-                            [
-                                loxoneTopic: 'zb/devel/test_zigbee_tlacitko_1/state',
-                                mappingFormula: '{ "state" : "${payload.active.toUpperCase()}" }'
-                            ]
-                    ],
-                    z2lPayloadMappings: [
-                            [
-                                loxoneTopic: 'zb/devel/test_zigbee_tlacitko_1/cmd',
-                                mappingFormula:'${payload.state.toLowerCase()}'
-                            ]
-                    ],
-                ],
-
-                [
-                        zigbeeDeviceName: 'aquara_1',
-                        z2lPayloadMappings: [
-                            [
-                                    loxoneTopic: 'zb/devel/test_zigbee_temperature/cmd',
-                                    mappingFormula:  '${payload.temperature}'
-                            ],
-                            [
-                                    loxoneTopic: 'zb/devel/test_zigbee_humidity/cmd',
-                                    mappingFormula:  '${payload.humidity}'
-                            ]
-                        ]
-
-                ],
-
-                [
-                        zigbeeDeviceName: 'bulb_1',
-                        l2zPayloadMappings: [
-                                [
-                                        loxoneTopic: 'zb/devel/devel/state',
-                                        mappingFormula: '{ "brightness" : "${payload.value}" }'
-                                ]
-                        ]
-                ]
-        ]
-
-
-    ]
-
+class Env {
+    static String mqttHost = "rpi4" // System.getenv("MQTT_HOST")
+    static String mqttPort = "1883" // System.getenv("MQTT_PORT")
+    static  ZIGBEE_VALUES_REFRESH_PERIOD = 120000      // ako casto sa maju nacitat data zo vsetkych namapovanych zigbee devices
 }
 
-class Configuration {
 
-    def configuration = Devel.exampleConfiguration
+class Configuration {
+    // main app configuration
+    def configuration
+
+    // helpers to speed up searching for mappings
     def zigbeeDeviceNameToMapping = [:]
     def loxoneTopicToMapping = [:]
 
@@ -86,7 +38,6 @@ class Configuration {
 
     void load(File configFile) {
         configuration = new JsonSlurper().parse(configFile)
-        //configuration = Devel.exampleConfiguration
         configuration.mapping.each {mapping->
             zigbeeDeviceNameToMapping.put(mapping.zigbeeDeviceName, mapping)
             mapping.l2zPayloadMappings?.each {i->
@@ -111,31 +62,39 @@ class MqttCache {
 
 }
 
+// main bridge class
 @Slf4j
 class Bridge implements MqttCallback {
     final mqttCache = new MqttCache()
     MqttAsyncClient mqttClient
     final jsonSlurper = new JsonSlurper()
     def configuration = new Configuration()
-    private CountDownLatch m_latch = new CountDownLatch(1)
+    private CountDownLatch m_latch
     def engine = new groovy.text.GStringTemplateEngine()
-    def zigbeeRefreshTimer = new Timer()
+    def zigbeeRefreshTimer
 
-    String host = "rpi4"
-    long ZIGBEE_VALUES_REFRESH_PERIOD = 120000      // ako casto sa maju nacitat data zo vsetkych namapovanych zigbee devices
+
 
     def connect() {
         configuration.load("exampleConfiguration.json" as File)
         int rnd = (Math.random() * 100) as int
-        mqttClient = new MqttAsyncClient("tcp://${host}:1883", "SubscriberClient${rnd}")
+
+        MqttConnectOptions mqttConnectOptions = new MqttConnectOptions();
+        mqttConnectOptions.setAutomaticReconnect(true);
+        mqttConnectOptions.setCleanSession(true)
+
+        mqttClient = new MqttAsyncClient("tcp://${Env.mqttHost}:${Env.mqttPort}", "zigbee2loxone_bridge_${rnd}", new MemoryPersistence())
         mqttClient.callback = this
-        //mqttClient.setTimeToWait(3000)
-        mqttClient.connect().waitForCompletion(5000)
+        mqttClient.connect(mqttConnectOptions).waitForCompletion(60000)
         mqttClient.subscribe("loxone/#", 0)
         mqttClient.subscribe("zigbee/#", 0)
 
-        zigbeeRefreshTimer.scheduleAtFixedRate(()->requestZigbeeData(), 1, ZIGBEE_VALUES_REFRESH_PERIOD)
-        //requestZigbeeData()
+        m_latch  = new CountDownLatch(1)
+
+        if(zigbeeRefreshTimer == null) {
+            zigbeeRefreshTimer = new Timer()
+            zigbeeRefreshTimer.scheduleAtFixedRate(()->requestZigbeeData(), 1, Env.ZIGBEE_VALUES_REFRESH_PERIOD)
+        }
 
         waitFinish()
     }
@@ -218,7 +177,7 @@ class Bridge implements MqttCallback {
                         sendToLoxoneComponent(m.loxoneTopic, loxonePayload)
                     }
                 } catch (Exception e) {
-                    log.error(e)
+                    log.error("Failed to send to loxone", e)
                 }
             }
         }
@@ -253,11 +212,13 @@ class Bridge implements MqttCallback {
     }
 
     void requestZigbeeData() {
-        configuration.getConfiguredZigbeeDeviceNames().each {deviceName->
-            def mqttTopic = "zigbee/${deviceName}/get"
-            def mqttMessage = new MqttMessage(payload: '{"state": ""}')
-            mqttMessage.setQos(0)
-            sendMqttMessage(mqttTopic, mqttMessage)
+        if(mqttClient.isConnected()) {
+            configuration.getConfiguredZigbeeDeviceNames().each { deviceName ->
+                def mqttTopic = "zigbee/${deviceName}/get"
+                def mqttMessage = new MqttMessage(payload: '{"state": ""}')
+                mqttMessage.setQos(0)
+                sendMqttMessage(mqttTopic, mqttMessage)
+            }
         }
     }
 
@@ -266,7 +227,17 @@ class Bridge implements MqttCallback {
         mqttClient.publish(mqttTopic, mqttMessage)
     }
 
+    void run() {
+        while (true) {
+            try {
+                connect()
+            } catch(Exception e) {
+                log.error("Failed to start bridge, reason: {}", e.toString())
+                sleep(3000)
+            }
+        }
+    }
 }
 
-def bridge = new Bridge()
-bridge.connect()
+// run main loop
+new Bridge().run()
