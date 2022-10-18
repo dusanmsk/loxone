@@ -39,9 +39,9 @@ class Configuration {
 
     void load(File configFile) {
         configuration = new JsonSlurper().parse(configFile)
-        configuration.mapping.each {mapping->
+        configuration.mapping.each { mapping ->
             zigbeeDeviceNameToMapping.put(mapping.zigbeeDeviceName, mapping)
-            mapping.l2zPayloadMappings?.each {i->
+            mapping.l2zPayloadMappings?.each { i ->
                 loxoneTopicToMapping.put(i.loxoneTopic, mapping)
             }
         }
@@ -53,11 +53,11 @@ class MqttCache {
     def loxonePayloads = [:]
     def zigbeePayloads = [:]
 
-    def  storeLoxonePayload( loxonePath,  payload) {
+    def storeLoxonePayload(loxonePath, payload) {
         loxonePayloads[loxonePath] = payload
     }
 
-    def  storeZigbeePayload( zigbeeDeviceName,  payload) {
+    def storeZigbeePayload(zigbeeDeviceName, payload) {
         zigbeePayloads[zigbeeDeviceName] = payload
     }
 
@@ -65,7 +65,7 @@ class MqttCache {
 
 // main bridge class
 @Slf4j
-class Bridge  {
+class Bridge {
     final mqttCache = new MqttCache()
     Mqtt3AsyncClient mqttClient
     boolean mqttClientConnected
@@ -76,21 +76,22 @@ class Bridge  {
 
     def processLoxoneMqttMessage(Mqtt3Publish mqttMessage) {
         try {
-        if(mqttMessage.payload.isPresent()) {
-            def loxonePath = mqttMessage.topic.toString().replaceFirst("loxone/", "")
-            def mapping = configuration.getMappingForLoxonePath(loxonePath)
-            if (mapping != null) {
-                def payload = getPayload(mqttMessage)
-                mqttCache.storeLoxonePayload(loxonePath, payload)
-                mapping.l2zPayloadMappings?.each { m ->
-                    def template = engine.createTemplate(m.mappingFormula).make([payload: payload])
-                    def zigbeePayload = template.toString()
-                    if (zigbeePayload != "null") {
-                        sendToZigbeeDevice(mapping.zigbeeDeviceName, zigbeePayload)
+            if (mqttMessage.payload.isPresent()) {
+                def loxonePath = mqttMessage.topic.toString().replaceFirst("loxone/", "")
+                def mapping = configuration.getMappingForLoxonePath(loxonePath)
+                if (mapping != null && mapping.enabled) {
+                    def payload = getPayload(mqttMessage)
+                    mqttCache.storeLoxonePayload(loxonePath, payload)
+                    mapping.l2zPayloadMappings?.each { m ->
+                        def template = engine.createTemplate(m.mappingFormula).make([payload: payload])
+                        def zigbeePayload = template.toString()
+                        if (zigbeePayload != "null") {
+                            sendToZigbeeDevice(mapping.zigbeeDeviceName, zigbeePayload)
+                        }
                     }
                 }
             }
-        }} catch(Exception e) {
+        } catch (Exception e) {
             log.error("Failed to process loxone mqtt message", e)
         }
     }
@@ -108,11 +109,11 @@ class Bridge  {
     }
 
 
-    def  forwardZigbeeToLoxone(Mqtt3Publish mqtt3Publish) {
+    def forwardZigbeeToLoxone(Mqtt3Publish mqtt3Publish) {
         def topic = mqtt3Publish.topic.toString()
         def zigbeeDeviceName = getZigbeeDeviceName(topic)
         def mapping = configuration.getMappingForZigbeeDevice(zigbeeDeviceName)
-        if(mapping != null) {
+        if (mapping != null && mapping.enabled) {
             def payload = getPayload(mqtt3Publish)
             mqttCache.storeZigbeePayload(zigbeeDeviceName, payload)
 
@@ -121,7 +122,7 @@ class Bridge  {
                 def template = engine.createTemplate(m.mappingFormula).make([payload: payload])
                 try {
                     def loxonePayload = template.toString()
-                    if(loxonePayload != "null") {
+                    if (loxonePayload != "null") {
                         sendToLoxoneComponent(m.loxoneTopic, loxonePayload)
                     }
                 } catch (Exception e) {
@@ -146,8 +147,8 @@ class Bridge  {
     }
 
     // for all configured zigbee device mappings, try to get actual data from devices
-    void requestZigbeeData() {
-        if(mqttClientConnected) {
+    void refreshZigbeeData() {
+        if (mqttClientConnected) {
             configuration.getConfiguredZigbeeDeviceNames().each { deviceName ->
                 sendMqttMessage("zigbee/${deviceName}/get", '{"state": ""}')
             }
@@ -155,11 +156,11 @@ class Bridge  {
     }
 
     def sendMqttMessage(String topic, String payload) {
-        log.info("Sending mqtt message to topic '{}', payload '{}'", topic, payload )
+        log.info("Sending mqtt message to topic '{}', payload '{}'", topic, payload)
         mqttClient.publishWith()
-        .topic(topic)
-        .payload(payload.getBytes())
-        .send()
+                .topic(topic)
+                .payload(payload.getBytes())
+                .send()
     }
 
     def connect() {
@@ -170,14 +171,14 @@ class Bridge  {
                 .identifier("zigbee2loxone_bridge_${rnd}")
                 .serverHost(Env.mqttHost)
                 .serverPort(Env.mqttPort as Integer)
-                .addConnectedListener{
+                .addConnectedListener {
                     mqttClientConnected = true
                     log.info("MQTT connected")
                     mqttClient.subscribeWith().topicFilter("loxone/#").callback(this::processLoxoneMqttMessage).send()
                     mqttClient.subscribeWith().topicFilter("zigbee/#").callback(this::processZigbeeMqttMessage).send()
-                    requestZigbeeData()
+                    refreshZigbeeData()
                 }
-                .addDisconnectedListener{
+                .addDisconnectedListener {
                     mqttClientConnected = false
                     log.info("MQTT disconnected")
                 }
@@ -185,15 +186,12 @@ class Bridge  {
                 .buildAsync();
 
         mqttClient.connect().get(60, TimeUnit.SECONDS)
-
-
         log.info("Initialized")
 
         while (mqttClientConnected) {
             sleep(Env.ZIGBEE_VALUES_REFRESH_PERIOD_SEC * 1000)
-            requestZigbeeData()
+            refreshZigbeeData()
         }
-
     }
 
     void run() {
@@ -201,7 +199,7 @@ class Bridge  {
             try {
                 configuration.load("exampleConfiguration.json" as File)
                 connect()
-            } catch(Exception e) {
+            } catch (Exception e) {
                 log.error("Failed to start bridge, reason: {}", e.toString())
                 sleep(3000)
             }
@@ -213,7 +211,7 @@ class Bridge  {
         mqtt3Publish.payload.get().get(buffer);
         try {
             return jsonSlurper.parse(buffer)
-        } catch(Exception e) {
+        } catch (Exception e) {
             return new String(buffer)
         }
     }
