@@ -76,7 +76,6 @@ class Bridge implements MqttCallback {
 
 
     def connect() {
-        configuration.load("exampleConfiguration.json" as File)
         int rnd = (Math.random() * 100) as int
 
         MqttConnectOptions mqttConnectOptions = new MqttConnectOptions();
@@ -111,7 +110,7 @@ class Bridge implements MqttCallback {
     @Override
     void messageArrived(String topic, MqttMessage mqttMessage) throws Exception {
         try {
-            //log.info("message arrived at topic '{}', payload '{}'", topic, new String(mqttMessage.payload) )
+            log.debug("message arrived at topic '{}', payload '{}'", topic, new String(mqttMessage.payload) )
             if (topic.startsWith("loxone/")) {
                 processLoxoneMqttMessage(topic, mqttMessage);
             }
@@ -119,7 +118,7 @@ class Bridge implements MqttCallback {
                 processZigbeeMqttMessage(topic, mqttMessage);
             }
         } catch (Exception e) {
-            println e
+            log.error("Failed to process mqtt message", e)
         }
     }
 
@@ -168,8 +167,6 @@ class Bridge implements MqttCallback {
 
             // transform and send to zigbee
             mapping.z2lPayloadMappings?.each { m ->
-
-
                 def template = engine.createTemplate(m.mappingFormula).make([payload: payload])
                 try {
                     def loxonePayload = template.toString()
@@ -183,40 +180,30 @@ class Bridge implements MqttCallback {
         }
     }
 
-
-    String getLoxoneComponentPath(String topic) {
-        // loxone/category/room/component_name/state -> category/room/component_name
-        def splt = topic.split("/")
-        return "${splt[1]}/${splt[2]}/${splt[3]}"
-    }
-
     String getZigbeeDeviceName(String topic) {
         // zigbee/device_name/status -> device_name
         def splt = topic.split("/")
         return splt[1]
     }
 
-
     void sendToZigbeeDevice(String zigbeeDeviceName, String mqttPayload) {
         def mqttTopic = "zigbee/${zigbeeDeviceName}/set"
         def mqttMessage = new MqttMessage(payload: mqttPayload)
-        mqttMessage.setQos(0)
         mqttClient.publish(mqttTopic, mqttMessage)
     }
 
     void sendToLoxoneComponent(String loxoneSendPath, String mqttPayload) {
         def mqttTopic = "loxone/${loxoneSendPath}"
         def mqttMessage = new MqttMessage(payload: mqttPayload)
-        mqttMessage.setQos(0)
         sendMqttMessage(mqttTopic, mqttMessage)
     }
 
+    // for all configured zigbee device mappings, try to get actual data from devices
     void requestZigbeeData() {
         if(mqttClient.isConnected()) {
             configuration.getConfiguredZigbeeDeviceNames().each { deviceName ->
                 def mqttTopic = "zigbee/${deviceName}/get"
                 def mqttMessage = new MqttMessage(payload: '{"state": ""}')
-                mqttMessage.setQos(0)
                 sendMqttMessage(mqttTopic, mqttMessage)
             }
         }
@@ -224,12 +211,14 @@ class Bridge implements MqttCallback {
 
     def sendMqttMessage(String mqttTopic, MqttMessage mqttMessage) {
         log.info("Sending mqtt message to topic '{}', payload '{}'", mqttTopic, new String(mqttMessage.payload) )
-        mqttClient.publish(mqttTopic, mqttMessage)
+        mqttMessage.setQos(0)
+        mqttClient.publish(mqttTopic, mqttMessage).waitForCompletion(5000)
     }
 
     void run() {
         while (true) {
             try {
+                configuration.load("exampleConfiguration.json" as File)
                 connect()
             } catch(Exception e) {
                 log.error("Failed to start bridge, reason: {}", e.toString())
