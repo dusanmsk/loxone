@@ -1,21 +1,49 @@
 {
   "mapping": [
+
     {
+      "enabled": true,
       "zigbeeDeviceName": "sock_repro_obyv",
       "l2zPayloadMappings": [
         {
           "loxoneTopic": "zb/devel/test_zigbee_tlacitko_1/state",
-          "mappingFormula": "{ \"state\" : \"${payload.active.toUpperCase()}\" }"
+          "mappingFormula": "{ \"state\" : \"${payload?.active?.toUpperCase()}\" }"
         }
       ],
       "z2lPayloadMappings": [
         {
           "loxoneTopic": "zb/devel/test_zigbee_tlacitko_1/cmd",
-          "mappingFormula": "${payload.state.toLowerCase()}"
+          "mappingFormula": "${payload?.state?.toLowerCase()}"
         }
       ]
     },
+
+
     {
+      "enabled": false,
+      "zigbeeDeviceName": "sock_repro_obyv",
+      "l2zPayloadMappings": [
+        {
+          "loxoneTopic": "zb/devel/test_zigbee_out_3/state",
+          "mappingFormula": "{ \"state\" : \"${payload?.value?.toUpperCase()}\" }"
+        }
+      ]
+    },
+
+    {
+      "enabled": false,
+      "zigbeeDeviceName": "sock_repro_obyv",
+      "l2zPayloadMappings": [
+        {
+          "loxoneTopic": "zb/devel/test_zigbee_out_2/state",
+          "mappingFormula": "{ \"state\" : \"${payload.value as Float > 0.0 ? 'on' : 'off'}\" }"
+        }
+      ]
+    },
+
+
+    {
+      "enabled": true,
       "zigbeeDeviceName": "aquara_1",
       "z2lPayloadMappings": [
         {
@@ -29,6 +57,7 @@
       ]
     },
     {
+      "enabled": true,
       "zigbeeDeviceName": "bulb_1",
       "l2zPayloadMappings": [
         {
