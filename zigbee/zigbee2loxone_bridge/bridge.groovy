@@ -9,8 +9,20 @@ import java.util.concurrent.TimeUnit
 @Grab(group = 'com.hivemq', module = 'hivemq-mqtt-client', version = '1.3.0')
 @Grab(group = 'org.slf4j', module = 'slf4j-simple', version = '1.7.13')
 
+class Util {
+    static String joinTopic(String[] parts) {
+        return parts.join("/").replaceAll("//", "/")
+    }
+
+    static String toLoxonePath(String mqttTopic) {
+        def splt = mqttTopic.split("/")
+        return "${splt[1]}/${splt[2]}/${splt[3]}"
+    }
+}
 
 class Env {
+    static String zigbeeTopic = "zigbee" // System.getenv("???")
+    static String loxoneTopic = "loxone" // System.getenv("???")
     static String mqttHost = "rpi4" // System.getenv("MQTT_HOST")
     static String mqttPort = "1883" // System.getenv("MQTT_PORT")
     static  ZIGBEE_VALUES_REFRESH_PERIOD_SEC = 300      // ako casto sa maju nacitat data zo vsetkych namapovanych zigbee devices
@@ -25,10 +37,6 @@ class Configuration {
     def zigbeeDeviceNameToMapping = [:]
     def loxoneTopicToMapping = [:]
 
-    def getMappingForLoxonePath(loxonePath) {
-        return loxoneTopicToMapping[loxonePath]
-    }
-
     def getMappingForZigbeeDevice(String zigbeeDeviceName) {
         return zigbeeDeviceNameToMapping[zigbeeDeviceName]
     }
@@ -37,12 +45,17 @@ class Configuration {
         return zigbeeDeviceNameToMapping.keySet()
     }
 
+    def getMappingForLoxoneTopic(String mqttTopic) {
+        return loxoneTopicToMapping[mqttTopic]
+    }
+
     void load(File configFile) {
         configuration = new JsonSlurper().parse(configFile)
         configuration.mapping.each { mapping ->
             zigbeeDeviceNameToMapping.put(mapping.zigbeeDeviceName, mapping)
             mapping.l2zPayloadMappings?.each { i ->
-                loxoneTopicToMapping.put(i.loxoneTopic, mapping)
+                def topic = Util.joinTopic(Env.loxoneTopic, i.loxoneComponentName, "/state")
+                loxoneTopicToMapping.put(topic, mapping)
             }
         }
     }
@@ -53,8 +66,8 @@ class MqttCache {
     def loxonePayloads = [:]
     def zigbeePayloads = [:]
 
-    def storeLoxonePayload(loxonePath, payload) {
-        loxonePayloads[loxonePath] = payload
+    def storeLoxonePayload(mqttTopic, payload) {
+        loxonePayloads[mqttTopic] = payload
     }
 
     def storeZigbeePayload(zigbeeDeviceName, payload) {
@@ -77,11 +90,11 @@ class Bridge {
     def processLoxoneMqttMessage(Mqtt3Publish mqttMessage) {
         try {
             if (mqttMessage.payload.isPresent()) {
-                def loxonePath = mqttMessage.topic.toString().replaceFirst("loxone/", "")
-                def mapping = configuration.getMappingForLoxonePath(loxonePath)
+                def topic = mqttMessage.topic.toString()
+                def mapping = configuration.getMappingForLoxoneTopic(topic)
                 if (mapping != null && mapping.enabled) {
                     def payload = getPayload(mqttMessage)
-                    mqttCache.storeLoxonePayload(loxonePath, payload)
+                    mqttCache.storeLoxonePayload(topic, payload)
                     mapping.l2zPayloadMappings?.each { m ->
                         def template = engine.createTemplate(m.mappingFormula).make([payload: payload])
                         def zigbeePayload = template.toString()
@@ -123,7 +136,7 @@ class Bridge {
                 try {
                     def loxonePayload = template.toString()
                     if (loxonePayload != "null") {
-                        sendToLoxoneComponent(m.loxoneTopic, loxonePayload)
+                        sendToLoxoneComponent(m.loxoneComponentName, loxonePayload)
                     }
                 } catch (Exception e) {
                     log.error("Failed to send to loxone", e)
@@ -139,11 +152,11 @@ class Bridge {
     }
 
     void sendToZigbeeDevice(String zigbeeDeviceName, String mqttPayload) {
-        sendMqttMessage("zigbee/${zigbeeDeviceName}/set", mqttPayload)
+        sendMqttMessage("${Env.zigbeeTopic}/${zigbeeDeviceName}/set", mqttPayload)
     }
 
-    void sendToLoxoneComponent(String loxoneSendPath, String mqttPayload) {
-        sendMqttMessage("loxone/${loxoneSendPath}", mqttPayload)
+    void sendToLoxoneComponent(String loxoneComponentName, String mqttPayload) {
+        sendMqttMessage("${Env.loxoneTopic}/${loxoneComponentName}/cmd", mqttPayload)
     }
 
     // for all configured zigbee device mappings, try to get actual data from devices
@@ -174,8 +187,8 @@ class Bridge {
                 .addConnectedListener {
                     mqttClientConnected = true
                     log.info("MQTT connected")
-                    mqttClient.subscribeWith().topicFilter("loxone/#").callback(this::processLoxoneMqttMessage).send()
-                    mqttClient.subscribeWith().topicFilter("zigbee/#").callback(this::processZigbeeMqttMessage).send()
+                    mqttClient.subscribeWith().topicFilter("${Env.loxoneTopic}/#").callback(this::processLoxoneMqttMessage).send()
+                    mqttClient.subscribeWith().topicFilter("${Env.zigbeeTopic}/#").callback(this::processZigbeeMqttMessage).send()
                     refreshZigbeeData()
                 }
                 .addDisconnectedListener {
