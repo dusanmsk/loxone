@@ -1,14 +1,14 @@
 permit_join: false
 homeassistant: false
 mqtt:
-  base_topic: ${ZIGBEE2MQTT_TOPIC}
+  base_topic: ${ZIGBEE_TOPIC}
   server: 'mqtt://${MQTT_HOST}'
   # user: my_user
   # password: my_password
 
 serial:
-  port: /dev/ttyACM0
-  #port: tcp://192.168.17.31:20108
+  #port: /dev/ttyACM0
+  port: tcp://192.168.17.31:20108
 
 devices: devices.yaml
 

@@ -20,27 +20,30 @@ services:
         ports:
             - 8880:8080
 
-    # zigbee2mqtt manager
-    zigbee2mqtt_manager:
-        build: zigbee/zigbee2mqtt_manager
+    zigbee2loxone_bridge:                
+        build: zigbee/zigbee2loxone_bridge/bridge
         restart: unless-stopped
         volumes:
-            - ./data/zigbee2mqtt_manager_settings.json:/settings.json
+            - ./data:/data
+            - groovy_grapes:/home/groovy/.groovy/grapes
         env_file:
             - config
         environment:
-          SETTINGS_JSON: /settings.json
+            - BRIDGE_CONFIG_FILE=/data/zigbee2loxone.json
         logging:
             driver: "${LOGGING_DRIVER}"
-        ports:
-            - 8881:8080
 
 
-    zigbee2mqttAssistant:
-        image: carldebilly/zigbee2mqttassistant
-        container_name: zigbee2mqttAssistant
-        restart: unless-stopped
-        env_file:
-            - config
-        ports:
-            - 8882:80
+    #zigbee2mqttAssistant:
+        #image: carldebilly/zigbee2mqttassistant
+        #container_name: zigbee2mqttAssistant
+        #restart: unless-stopped
+        #env_file:
+            #- config
+        #ports:
+            #- 8882:80
+
+            
+volumes:
+    # gradle grape cache
+    groovy_grapes:
