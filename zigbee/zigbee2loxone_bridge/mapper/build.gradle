@@ -1,0 +1,43 @@
+plugins {
+	id 'org.springframework.boot' version '2.7.4'
+	id 'io.spring.dependency-management' version '1.0.14.RELEASE'
+	id 'com.vaadin' version '23.2.5'
+	id 'java'
+}
+
+group = 'org.msk.zigbee'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '17'
+
+
+repositories {
+	mavenCentral()
+}
+
+ext {
+	set('vaadinVersion', "23.2.5")
+	set('springBootVersion', "2.7.4")
+}
+
+dependencies {
+	implementation 'com.vaadin:vaadin-spring-boot-starter'
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'com.hivemq:hivemq-mqtt-client:1.1.4'
+	implementation 'org.springframework.boot:spring-boot-devtools'
+	implementation 'com.google.guava:guava:31.1-jre'
+	implementation 'org.apache.groovy:groovy-all:4.0.6'
+	compileOnly "org.projectlombok:lombok:${lombokVersion}"
+	annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "com.vaadin:vaadin-bom:${vaadinVersion}"
+		mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
+	}
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
