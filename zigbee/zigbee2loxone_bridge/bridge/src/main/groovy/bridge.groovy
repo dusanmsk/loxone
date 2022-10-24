@@ -6,9 +6,7 @@ import groovy.util.logging.Slf4j
 
 import java.util.concurrent.TimeUnit
 
-@GrabConfig(systemClassLoader=true)     // for slf4j in docker image, dunno why it doesnt work without this setting
-@Grab(group = 'com.hivemq', module = 'hivemq-mqtt-client', version = '1.3.0')
-@Grab(group = 'org.slf4j', module = 'slf4j-simple', version = '1.7.36')
+// BRIDGE_CONFIG_FILE=/home/msk/work/github/loxone/zigbee/zigbee2loxone_bridge/config/bridge_configuration.json;LOXONE_TOPIC=loxone;MQTT_HOST=rpi4;MQTT_PORT=1883;ZIGBEE_TOPIC=zigbee
 
 class Util {
     static String joinTopic(String[] parts) {
