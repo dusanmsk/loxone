@@ -1,6 +1,9 @@
 package org.msk.zigbee.mapper.ui;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vaadin.flow.component.ClickEvent;
+import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.dialog.Dialog;
@@ -15,10 +18,14 @@ import com.vaadin.flow.spring.annotation.SpringComponent;
 import com.vaadin.flow.spring.annotation.UIScope;
 import java.util.ArrayList;
 import java.util.Collection;
-import org.msk.zigbee.TemplatingService;
+import java.util.HashSet;
+import java.util.List;
+import org.apache.commons.lang3.SerializationUtils;
+import org.msk.zigbee.mapper.ConfigurationService;
 import org.msk.zigbee.mapper.LoxoneService;
+import org.msk.zigbee.mapper.TemplatingService;
+import org.msk.zigbee.mapper.ZigbeeService;
 import org.msk.zigbee.mapper.configs.Configuration;
-import org.springframework.beans.factory.annotation.Autowired;
 
 @SpringComponent
 @Route
@@ -27,110 +34,272 @@ public class MappingEditView extends VerticalLayout {
 
     private final LoxoneService loxoneService;
     private final TemplatingService templatingService;
+    private final ZigbeeService zigbeeService;
+    private final ObjectMapper objectMapper;
+    private final ConfigurationService configurationService;
 
     private TextField deviceNameTextField;
-    private Grid<Configuration.Mapping.PayloadMapping> loxoneToZigbeeMappingGrid;
-    private Grid<Configuration.Mapping.PayloadMapping> zigbeeToLoxoneMappingGrid;
+    private Grid<Configuration.Mapping.PayloadMapping> payloadMappingGrid;
+    ComboBox<Configuration.Mapping.Direction> directionComboBox = new ComboBox<>();
 
     private Configuration.Mapping mapping;
 
-    public MappingEditView(@Autowired LoxoneService loxoneService, @Autowired TemplatingService templatingService) {
+    private String zigbeeDeviceName;
+
+    public MappingEditView(LoxoneService loxoneService, TemplatingService templatingService, ZigbeeService zigbeeService, ObjectMapper objectMapper,
+            ConfigurationService configurationService) {
         this.loxoneService = loxoneService;
+        this.zigbeeService = zigbeeService;
         this.templatingService = templatingService;
+        this.configurationService = configurationService;
+        this.objectMapper = objectMapper;
         deviceNameTextField = new TextField("Zigbee device name:");
         deviceNameTextField.setReadOnly(true);
 
-        loxoneToZigbeeMappingGrid = createPayloadMappingGrid();
-        zigbeeToLoxoneMappingGrid = createPayloadMappingGrid();
+        directionComboBox.setItems(Configuration.Mapping.Direction.values());
+        directionComboBox.setRequired(true);
+        directionComboBox.addValueChangeListener(i -> mapping.setDirection(i.getValue()));
 
-        add(deviceNameTextField);
-        add(new Label("Loxone to zigbee mappings:"));
-        add(loxoneToZigbeeMappingGrid);
+        HorizontalLayout buttonLayout = new HorizontalLayout();
+        buttonLayout.add(new Button("Create new", this::createNewPayloadMapping));
+        buttonLayout.add(new Button("Clone existing", this::cloneExistingPayloadMapping));
 
-        add(new Label("Zigbee to loxone mappings:"));
-        add(zigbeeToLoxoneMappingGrid);
+        payloadMappingGrid = createPayloadMappingGrid();
 
+        add(deviceNameTextField, directionComboBox);
+        add(new Label("Payload mapping:"), buttonLayout, payloadMappingGrid);
+
+        add(new Button("Save", this::save));
+        add(new Button("Cancel", this::cancel));
     }
 
-    public void editMapping(Configuration.Mapping mapping) {
-        this.mapping = mapping;
+    private void cloneExistingPayloadMapping(ClickEvent<Button> buttonClickEvent) {
+        Dialog cloneDialog = new Dialog();
+        ComboBox<String> deviceNameComboBox = new ComboBox<>();
+        deviceNameComboBox.setItems(configurationService.getMappedZigbeeDeviceNames());
+        cloneDialog.add(deviceNameComboBox);
+        cloneDialog.add(new Button("Confirm", event -> {
+            cloneMappingFrom(deviceNameComboBox.getValue());
+            cloneDialog.close();
+        }));
+        cloneDialog.open();
+    }
+
+    private void cloneMappingFrom(String sourceZigbeeDeviceName) {
+        var origName = mapping.getZigbeeDeviceName();
+        configurationService.getMapping(sourceZigbeeDeviceName).ifPresent(m -> {
+            m = SerializationUtils.clone(m);
+            m.setZigbeeDeviceName(origName);
+            editMapping(sourceZigbeeDeviceName, m);
+        });
+    }
+
+    private void cancel(ClickEvent<Button> buttonClickEvent) {
+        UI.getCurrent().navigate(MainView.class);
+    }
+
+    private void save(ClickEvent<Button> buttonClickEvent) {
+        configurationService.setMapping(mapping.getZigbeeDeviceName(), mapping);
+        UI.getCurrent().navigate(MainView.class);
+    }
+
+    private void createNewPayloadMapping(ClickEvent<Button> buttonClickEvent) {
+        Configuration.Mapping.PayloadMapping payloadMapping = Configuration.Mapping.PayloadMapping.builder().build();
+        editPayloadMapping(payloadMapping);
+    }
+
+    public void editMapping(String zigbeeDeviceName, Configuration.Mapping mappingToEdit) {
+        this.zigbeeDeviceName = zigbeeDeviceName;
+        this.mapping = SerializationUtils.clone(mappingToEdit);
         refreshData();
     }
 
     private void refreshData() {
         deviceNameTextField.setValue(mapping.getZigbeeDeviceName());
-        loxoneToZigbeeMappingGrid.setItems(mapping.getL2zPayloadMappings());
-        zigbeeToLoxoneMappingGrid.setItems(mapping.getZ2lPayloadMappings());
+        directionComboBox.setValue(mapping.getDirection());
+        List<Configuration.Mapping.PayloadMapping> payloadMapping = mapping.getPayloadMapping();
+        if (payloadMapping == null) {
+            payloadMapping = new ArrayList<>();
+        }
+        payloadMappingGrid.setItems(payloadMapping);
     }
 
     private Grid<Configuration.Mapping.PayloadMapping> createPayloadMappingGrid() {
         Grid<Configuration.Mapping.PayloadMapping> grid = new Grid<>();
         grid.addColumn(Configuration.Mapping.PayloadMapping::getLoxoneComponentName).setHeader("Loxone component name");
-        grid.addColumn(Configuration.Mapping.PayloadMapping::getMappingFormula).setHeader("Mapping formula");
-        grid.addItemDoubleClickListener(e -> editPayloadMapping(e.getItem()));
+        grid.addColumn(Configuration.Mapping.PayloadMapping::getLoxoneAttributeName).setHeader("Loxone attribute name");
+        grid.addColumn(Configuration.Mapping.PayloadMapping::getZigbeeAttributeName).setHeader("Zigbee attribute name");
+        //grid.addItemDoubleClickListener(e -> editPayloadMapping(e.getItem()));
+        grid.addComponentColumn(i -> createEditDeleteButtons(i));
         return grid;
     }
 
-    private void editPayloadMapping(Configuration.Mapping.PayloadMapping payload) {
-        Dialog dialog = createPayloadMappingDialog(payload);
-        dialog.open();
-
-        add(dialog);
+    private Component createEditDeleteButtons(Configuration.Mapping.PayloadMapping payloadMapping) {
+        HorizontalLayout horizontalLayout = new HorizontalLayout();
+        horizontalLayout.add(new Button("Edit", x -> {
+            editPayloadMapping(payloadMapping);
+        }));
+        horizontalLayout.add(new Button("Delete", x -> {
+            deletePayloadMapping(payloadMapping);
+        }));
+        return horizontalLayout;
     }
 
-    // todo dusan.zatkovsky live transformation testing
-    private Dialog createPayloadMappingDialog(Configuration.Mapping.PayloadMapping payload) {
-        Dialog dialog = new Dialog();
-        dialog.setHeaderTitle("Edit mapping");
-        VerticalLayout dialogLayout = new VerticalLayout();
-        ComboBox<String> loxoneComponentNameCombobox = createLoxoneComponentNameComboBox();
-        TextField mappingFormulaEditor = createMappingFormulaEditor();
-        loxoneComponentNameCombobox.setValue(payload.getLoxoneComponentName());
-        mappingFormulaEditor.setValue(payload.getMappingFormula());
-        SamplePayloadSelector samplePayloadSelector = new SamplePayloadSelector(loxoneService.getPayloadSamples(payload.getLoxoneComponentName())) {
+    private void deletePayloadMapping(Configuration.Mapping.PayloadMapping payloadMapping) {
+        mapping.getPayloadMapping().remove(payloadMapping);
+        refreshData();
+    }
 
-            @Override
-            public String translateValue(String payload) {
-                return templatingService.processTemplate(mappingFormulaEditor.getValue(), payload);
+    private void editPayloadMapping(Configuration.Mapping.PayloadMapping toEditMapping) {
+        PayloadMappingEditDialog dialog =
+                new PayloadMappingEditDialog(mapping.getZigbeeDeviceName(), toEditMapping, loxoneService, zigbeeService, templatingService) {
 
+                    @Override
+                    public void onSave(Configuration.Mapping.PayloadMapping editedMapping) {
+                        int idx = mapping.getPayloadMapping().indexOf(toEditMapping);
+                        idx = idx == -1 ? 0 : idx;
+                        mapping.getPayloadMapping().remove(toEditMapping);
+                        mapping.getPayloadMapping().add(idx, editedMapping);
+                        refreshData();
+                    }
+                };
+        add(dialog.dialog);
+    }
+
+    abstract class PayloadMappingEditDialog {
+
+        private final Dialog dialog;
+        private ComboBox<String> loxoneComponentNameCombobox;
+        private ComboBox<String> loxoneAttributeNameComboBox;
+        private ComboBox<String> zigbeeAttributeNameComboBox;
+
+        private final ComboBox.ItemFilter<String> simpleFilter = (i, filterString) -> i == null ? false : i.toLowerCase().contains(filterString.toLowerCase());
+
+        public abstract void onSave(Configuration.Mapping.PayloadMapping payloadMapping);
+
+        public PayloadMappingEditDialog(String zigbeeDeviceName, Configuration.Mapping.PayloadMapping payloadMapping, LoxoneService loxoneService,
+                ZigbeeService zigbeeService, TemplatingService templatingService) {
+            dialog = new Dialog();
+            dialog.setResizable(true);
+            dialog.setHeaderTitle("Edit mapping");
+            VerticalLayout dialogLayout = new VerticalLayout();
+
+            HashSet<String> knownLoxoneComponentNames = new HashSet<>(loxoneService.getKnownLoxoneComponentNames());
+            knownLoxoneComponentNames.add(payloadMapping.getLoxoneComponentName());
+
+            HashSet<String> knownLoxoneAttributeNames = new HashSet<>();
+            knownLoxoneAttributeNames.add(payloadMapping.getLoxoneAttributeName());
+
+            HashSet<String> knownZigbeeAttributeNames = new HashSet<>(zigbeeService.getKnownAttributeNames(zigbeeDeviceName));
+            knownZigbeeAttributeNames.add(payloadMapping.getZigbeeAttributeName());
+
+            loxoneComponentNameCombobox = new ComboBox<>("Loxone component name:");
+            loxoneComponentNameCombobox.setRequired(true);
+            allowCustomValues(loxoneComponentNameCombobox, knownLoxoneComponentNames, simpleFilter);
+            loxoneComponentNameCombobox.setSizeFull();
+
+            loxoneAttributeNameComboBox = new ComboBox<>("Loxone attribute name:");
+            loxoneAttributeNameComboBox.setRequired(true);
+            allowCustomValues(loxoneAttributeNameComboBox, knownLoxoneAttributeNames, simpleFilter);
+            loxoneAttributeNameComboBox.setSizeFull();
+
+            zigbeeAttributeNameComboBox = new ComboBox<>("Zigbee attribute name:");
+            zigbeeAttributeNameComboBox.setRequired(true);
+            allowCustomValues(zigbeeAttributeNameComboBox, knownZigbeeAttributeNames, simpleFilter);
+            zigbeeAttributeNameComboBox.setSizeFull();
+
+            loxoneComponentNameCombobox.addValueChangeListener(i -> {
+                knownLoxoneAttributeNames.clear();
+                knownLoxoneAttributeNames.addAll(loxoneService.getAllKnownAttributes(i.getValue()));
+                loxoneAttributeNameComboBox.setItems(simpleFilter, knownLoxoneAttributeNames);
+            });
+
+            TextField l2zMappingFormulaEditor = createMappingFormulaEditor("Loxone to zigbee mapping formula:");
+            TextField z2lMappingFormulaEditor = createMappingFormulaEditor("Zigbee to loxone mapping formula:");
+
+            loxoneComponentNameCombobox.setItems(simpleFilter, knownLoxoneComponentNames);
+            loxoneComponentNameCombobox.setValue(payloadMapping.getLoxoneComponentName());
+
+            loxoneAttributeNameComboBox.setItems(simpleFilter, knownLoxoneAttributeNames);
+            loxoneAttributeNameComboBox.setValue(payloadMapping.getLoxoneAttributeName());
+
+            zigbeeAttributeNameComboBox.setItems(simpleFilter, knownZigbeeAttributeNames);
+            zigbeeAttributeNameComboBox.setValue(payloadMapping.getZigbeeAttributeName());
+
+            if (payloadMapping.getMappingFormulaL2Z() != null) {
+                l2zMappingFormulaEditor.setValue(payloadMapping.getMappingFormulaL2Z());
             }
-        };
-        dialogLayout.add(loxoneComponentNameCombobox, mappingFormulaEditor, samplePayloadSelector);
-        dialog.setWidth("40%");
-        dialog.setResizable(true);
-        dialog.add(dialogLayout);
+            if (payloadMapping.getMappingFormulaZ2L() != null) {
+                z2lMappingFormulaEditor.setValue(payloadMapping.getMappingFormulaZ2L());
+            }
 
-        Button saveButton = new Button("Save", e -> {
-            payload.setLoxoneComponentName(loxoneComponentNameCombobox.getValue());
-            payload.setMappingFormula(mappingFormulaEditor.getValue());
-            refreshData();
-            dialog.close();
-        });
-        Button cancelButton = new Button("Cancel", e -> dialog.close());
-        dialog.getFooter().add(cancelButton);
-        dialog.getFooter().add(saveButton);
+            SamplePayloadSelector loxoneToZigbeePayloadSampleSelector =
+                    new SamplePayloadSelector(loxoneService.getPayloadSamples(payloadMapping.getLoxoneComponentName())) {
 
-        //dialog.setModal(true);
-        return dialog;
+                        @Override
+                        public String translateValue(String payload) {
+                            return templatingService.processTemplate(l2zMappingFormulaEditor.getValue(), payload, loxoneAttributeNameComboBox.getValue());
+                        }
 
-    }
+                        @Override
+                        public void send(String value) {
+                            zigbeeService.send(zigbeeDeviceName, zigbeeAttributeNameComboBox.getValue(), value);
+                        }
+                    };
 
-    private TextField createMappingFormulaEditor() {
-        TextField editor = new TextField("Mapping formula:");
-        editor.setSizeFull();
-        return editor;
-    }
+            SamplePayloadSelector zigbeeToLoxonePayloadSampleSelector = new SamplePayloadSelector(zigbeeService.getPayloadSamples(zigbeeDeviceName)) {
 
-    private ComboBox<String> createLoxoneComponentNameComboBox() {
-        ComboBox.ItemFilter<String> filter = (i, filterString) -> i.toLowerCase().contains(filterString.toLowerCase());
-        ComboBox<String> comboBox = new ComboBox<>("Zigbee component name:");
-        comboBox.setItems(filter, getKnownLoxoneComponentNames());
-        comboBox.setSizeFull();
-        return comboBox;
-    }
+                @Override
+                public String translateValue(String payload) {
+                    return templatingService.processTemplate(z2lMappingFormulaEditor.getValue(), payload, zigbeeAttributeNameComboBox.getValue());
+                }
 
-    private Collection<String> getKnownLoxoneComponentNames() {
-        return loxoneService.getKnownLoxoneComponentNames();
+                @Override
+                public void send(String value) {
+                    loxoneService.send(loxoneComponentNameCombobox.getValue(), value);
+                }
+            };
+
+            dialogLayout.add(loxoneComponentNameCombobox, loxoneAttributeNameComboBox, zigbeeAttributeNameComboBox, l2zMappingFormulaEditor,
+                    z2lMappingFormulaEditor, loxoneToZigbeePayloadSampleSelector, zigbeeToLoxonePayloadSampleSelector);
+            dialog.setWidth("40%");
+            dialog.setResizable(true);
+            dialog.add(dialogLayout);
+
+            Button saveButton = new Button("Save", e -> {
+                Configuration.Mapping.PayloadMapping m = Configuration.Mapping.PayloadMapping.builder()
+                        .loxoneAttributeName(loxoneAttributeNameComboBox.getValue())
+                        .loxoneComponentName(loxoneComponentNameCombobox.getValue())
+                        .mappingFormulaL2Z(l2zMappingFormulaEditor.getValue())
+                        .mappingFormulaZ2L(z2lMappingFormulaEditor.getValue())
+                        .zigbeeAttributeName(zigbeeAttributeNameComboBox.getValue())
+                        .build();
+                onSave(m);
+                dialog.close();
+            });
+            Button cancelButton = new Button("Cancel", e -> dialog.close());
+            dialog.getFooter().add(cancelButton);
+            dialog.getFooter().add(saveButton);
+
+            //dialog.setModal(true);
+            dialog.open();
+        }
+
+        private void allowCustomValues(ComboBox<String> comboBox, HashSet<String> items, ComboBox.ItemFilter<String> filter) {
+            comboBox.setAllowCustomValue(true);
+            comboBox.addCustomValueSetListener(i -> {
+                items.add(i.getDetail());
+                comboBox.setItems(filter, items);
+                comboBox.setValue(i.getDetail());
+            });
+        }
+
+        private TextField createMappingFormulaEditor(String title) {
+            TextField editor = new TextField(title);
+            editor.setSizeFull();
+            return editor;
+        }
+
     }
 
     private abstract class SamplePayloadSelector extends HorizontalLayout {
@@ -143,15 +312,19 @@ public class MappingEditView extends VerticalLayout {
         public SamplePayloadSelector(Collection<String> payloads) {
             this.payloads = new ArrayList<>(payloads);
             payloadLabel = new TextField();
-            payloadLabel.setReadOnly(true);
+            //payloadLabel.setReadOnly(true);
             Button prevButton = new Button("<", this::prev);
             Button nextButton = new Button(">", this::next);
             translatedValueTextField = new TextField();
-            translatedValueTextField.setReadOnly(true);
-            add(payloadLabel, prevButton, nextButton, translatedValueTextField);
+            //translatedValueTextField.setReadOnly(true);
+            Button sendButton = new Button("Send");
+            sendButton.addClickListener(e -> send(translatedValueTextField.getValue()));
+            add(payloadLabel, prevButton, nextButton, translatedValueTextField, sendButton);
         }
 
         abstract public String translateValue(String payload);
+
+        abstract public void send(String value);
 
         private void next(ClickEvent<Button> buttonClickEvent) {
             cursor++;

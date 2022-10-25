@@ -1,10 +1,13 @@
 package org.msk.zigbee.mapper;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.EvictingQueue;
 import com.hivemq.client.mqtt.datatypes.MqttTopic;
 import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5Publish;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -24,6 +27,7 @@ public class LoxoneService {
 
     private static final int MAX_REMEMBERED_PAYLOADS = 10;
     private final MqttService mqttService;
+    private final ObjectMapper objectMapper;
 
     private Map<String, EvictingQueue<String>> loxonePayloads = new HashMap<>();
 
@@ -70,11 +74,32 @@ public class LoxoneService {
         }
     }
 
+    public Collection<String> getAllKnownAttributes(String loxoneComponentName) {
+        HashSet<String> knownAttributeNames = new HashSet<>();
+        EvictingQueue<String> queue = loxonePayloads.get(loxoneComponentName);
+        if(queue == null || queue.isEmpty() ) {
+            return knownAttributeNames;
+        }
+        queue.stream().forEach(payload->{
+            try {
+                var payloadMap = objectMapper.readValue(payload, HashMap.class);
+                payloadMap.keySet().forEach(i->knownAttributeNames.add(i.toString()));
+            } catch (JsonProcessingException e) {
+                log.debug("Failed to deserialize payload '{}'", payload);
+            }
+        });
+        return knownAttributeNames;
+    }
+
     private String parseLoxoneComponentName(MqttTopic topic) {
         String[] splt = topic.toString().split("/");
         return String.format("%s/%s/%s", splt[1], splt[2], splt[3]);
     }
 
-
-
+    public void send(String loxoneComponentName, String value) {
+        // todo dusan.zatkovsky property
+        String topic = String.format("loxone/%s/cmd", loxoneComponentName).replaceAll("//", "/");
+        log.debug("Sending to mqtt topic '{}' value '{}'", topic, value);
+        mqttService.publish(topic, value);
+    }
 }

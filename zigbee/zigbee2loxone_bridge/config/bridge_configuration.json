@@ -1,47 +1,64 @@
 {
-  "mapping": [
-
-    {
-      "enabled": true,
-      "zigbeeDeviceName": "socket_2",
-      "l2zPayloadMappings": [
-        {
-          "loxoneComponentName": "zb/devel/test_zigbee_tlacitko_1",
-          "mappingFormula": "{ \"state\" : \"${payload?.active?.toUpperCase()}\" }"
-        }
-      ],
-      "z2lPayloadMappings": [
-        {
-          "loxoneComponentName": "zb/devel/test_zigbee_tlacitko_1",
-          "mappingFormula": "${payload?.state?.toLowerCase()}"
-        }
-      ]
-    },
-
-    {
-      "enabled": true,
-      "zigbeeDeviceName": "aquara_1",
-      "z2lPayloadMappings": [
-        {
-          "loxoneComponentName": "zb/devel/test_zigbee_temperature",
-          "mappingFormula": "${payload.temperature}"
-        },
-        {
-          "loxoneComponentName": "zb/devel/test_zigbee_humidity",
-          "mappingFormula": "${payload.humidity}"
-        }
-      ]
-    },
-
-    {
-      "enabled": true,
-      "zigbeeDeviceName": "bulb_1",
-      "l2zPayloadMappings": [
-        {
-          "loxoneComponentName": "zb/devel/devel",
-          "mappingFormula": "{ \"brightness\" : \"${payload.value}\" }"
-        }
-      ]
-    }
-  ]
+  "mapping" : [ {
+    "enabled" : true,
+    "zigbeeDeviceName" : "bulb_1",
+    "direction" : "LOXONE_TO_ZIGBEE",
+    "payloadMapping" : [ {
+      "loxoneComponentName" : "zb/devel/led_brightness",
+      "loxoneAttributeName" : "value",
+      "zigbeeAttributeName" : "brightness",
+      "mappingFormulaL2Z" : null,
+      "mappingFormulaZ2L" : null
+    } ]
+  }, {
+    "enabled" : true,
+    "zigbeeDeviceName" : "socket_1",
+    "direction" : "BIDIRECTIONAL",
+    "payloadMapping" : [ {
+      "loxoneComponentName" : "zb/devel/zigbee_socket_1",
+      "loxoneAttributeName" : "active",
+      "zigbeeAttributeName" : "state",
+      "mappingFormulaL2Z" : "${value?.toUpperCase()}",
+      "mappingFormulaZ2L" : "${value?.toLowerCase()}"
+    } ]
+  }, {
+    "enabled" : true,
+    "zigbeeDeviceName" : "socket_3",
+    "direction" : "BIDIRECTIONAL",
+    "payloadMapping" : [ {
+      "loxoneComponentName" : "zb/devel/zigbee_socket_3",
+      "loxoneAttributeName" : "active",
+      "zigbeeAttributeName" : "state",
+      "mappingFormulaL2Z" : "${value?.toUpperCase()}",
+      "mappingFormulaZ2L" : "${value?.toLowerCase()}"
+    } ]
+  }, {
+    "enabled" : true,
+    "zigbeeDeviceName" : "socket_2",
+    "direction" : "BIDIRECTIONAL",
+    "payloadMapping" : [ {
+      "loxoneComponentName" : "zb/devel/zigbee_socket_2",
+      "loxoneAttributeName" : "active",
+      "zigbeeAttributeName" : "state",
+      "mappingFormulaL2Z" : "${value?.toUpperCase()}",
+      "mappingFormulaZ2L" : "${value?.toLowerCase()}"
+    } ]
+  }, {
+    "enabled" : true,
+    "zigbeeDeviceName" : "aquara_1",
+    "direction" : "ZIGBEE_TO_LOXONE",
+    "payloadMapping" : [ {
+      "loxoneComponentName" : "zb/devel/zigbee_aquara1_temperature",
+      "loxoneAttributeName" : null,
+      "zigbeeAttributeName" : "temperature",
+      "mappingFormulaL2Z" : "",
+      "mappingFormulaZ2L" : ""
+    }, {
+      "loxoneComponentName" : "zb/devel/zigbee_aquara1_humidity",
+      "loxoneAttributeName" : null,
+      "zigbeeAttributeName" : "humidity",
+      "mappingFormulaL2Z" : "",
+      "mappingFormulaZ2L" : ""
+    } ]
+  } ]
 }

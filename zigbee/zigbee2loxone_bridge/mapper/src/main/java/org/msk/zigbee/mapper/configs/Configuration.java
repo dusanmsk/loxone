@@ -1,5 +1,7 @@
 package org.msk.zigbee.mapper.configs;
 
+import com.vaadin.flow.component.Direction;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -19,18 +21,28 @@ public class Configuration {
     @NoArgsConstructor
     @AllArgsConstructor
     @Builder
-    static public class Mapping {
+    static public class Mapping implements Serializable {
 
         private boolean enabled;
         private String zigbeeDeviceName;
-        private List<PayloadMapping> l2zPayloadMappings = new ArrayList<>();
-        private List<PayloadMapping> z2lPayloadMappings = new ArrayList<>();
+        private Direction direction;
+        @Builder.Default
+        private List<PayloadMapping> payloadMapping = new ArrayList<>();
 
         @Data
         @NoArgsConstructor
-        static public class PayloadMapping {
+        @AllArgsConstructor
+        @Builder
+        static public class PayloadMapping implements Serializable {
             private String loxoneComponentName;
-            private String mappingFormula;
+            private String loxoneAttributeName;
+            private String zigbeeAttributeName;
+            private String mappingFormulaL2Z;
+            private String mappingFormulaZ2L;
+        }
+
+        public enum Direction {
+            BIDIRECTIONAL, LOXONE_TO_ZIGBEE, ZIGBEE_TO_LOXONE;
         }
 
     }
