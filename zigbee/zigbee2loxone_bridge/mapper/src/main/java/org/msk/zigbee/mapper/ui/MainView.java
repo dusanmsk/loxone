@@ -1,20 +1,25 @@
 package org.msk.zigbee.mapper.ui;
 
+import static java.lang.String.format;
+
 import com.vaadin.flow.component.ClickEvent;
+import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.grid.Grid;
-import com.vaadin.flow.component.grid.ItemDoubleClickEvent;
 import com.vaadin.flow.component.grid.editor.Editor;
 import com.vaadin.flow.component.html.Label;
 import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PreserveOnRefresh;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.spring.annotation.SpringComponent;
 import com.vaadin.flow.spring.annotation.UIScope;
-import java.util.concurrent.atomic.AtomicReference;
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
+import java.util.Optional;
 import javax.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,11 +28,6 @@ import org.msk.zigbee.mapper.ZigbeeDevice;
 import org.msk.zigbee.mapper.ZigbeeService;
 import org.msk.zigbee.mapper.configs.Configuration;
 import org.springframework.scheduling.annotation.Scheduled;
-
-import java.time.Duration;
-import java.time.temporal.ChronoUnit;
-
-import static java.lang.String.format;
 
 @Route
 @UIScope
@@ -49,24 +49,22 @@ public class MainView extends VerticalLayout {
 //    private TextField autoDisableMinutesTextField = new TextField("Auto disable after (min)");
 //    private Button enableJoinButton = new Button("Enable", this::enableJoin);
     private Label statusLabel = new Label();
-    private UI ui;
     private boolean loxoneStuffEnabled = true;
 
     @PostConstruct
     public void init() {
         setupUI();
-        refreshDeviceList(null);
-
+        refreshDeviceList();
     }
 
     private void setupUI() {
-        ui = UI.getCurrent();
         setupZigbeeDeviceListGrid();
         add(new Label("Zigbee device management:"));
         add(statusLabel);
 //        add(new HorizontalLayout(enableJoinButton, disableJoinButton, autoDisableMinutesTextField));
-        add(new Button("Refresh", this::refreshDeviceList));
+        add(new Button("Refresh", e -> refreshDeviceList()));
         add(zigbeeDeviceGrid);
+        add(new Button("Save", this::saveButtonClicked));
         if (loxoneStuffEnabled) {
             add(new Label("Loxone mapping:"));
             //add(new Button("Edit", event -> getUI().get().navigate(LoxoneMappingForm.class)));
@@ -78,17 +76,32 @@ public class MainView extends VerticalLayout {
         update();
     }
 
+    private void saveButtonClicked(ClickEvent<Button> event) {
+        try {
+            configurationService.save();
+        } catch (Exception e) {
+            log.error("Failed to save config file", e);
+            Notification.show("Failed to save config file");
+        }
+    }
 
     private void setupZigbeeDeviceListGrid() {
+
         // setup grid and columns
-        zigbeeDeviceGrid = new Grid<>();
+        zigbeeDeviceGrid = new Grid<>(ZigbeeDevice.class, false);
         Grid.Column<ZigbeeDevice> friendlyNameColumn = zigbeeDeviceGrid.addColumn(ZigbeeDevice::getFriendlyName).setHeader("Friendly name").setSortable(true);
         zigbeeDeviceGrid.addColumn(ZigbeeDevice::getManufacturerName).setHeader("Manufacturer").setSortable(true);
         zigbeeDeviceGrid.addColumn(ZigbeeDevice::getModelID).setHeader("Model").setSortable(true);
         zigbeeDeviceGrid.addColumn(ZigbeeDevice::getType).setHeader("Type").setSortable(true);
         zigbeeDeviceGrid.addColumn(ZigbeeDevice::getIeeeAddr).setHeader("Address").setSortable(true);
         zigbeeDeviceGrid.addColumn(device -> formatLastSeen(device)).setHeader("Last seen").setSortable(true);
-        zigbeeDeviceGrid.addItemDoubleClickListener(this::zigbeeDeviceDoubleClicked);
+        zigbeeDeviceGrid.addComponentColumn(device -> createActionButtons(device));
+
+        //zigbeeDeviceGrid.addItemDoubleClickListener(this::zigbeeDeviceDoubleClicked);
+        //GridContextMenu<ZigbeeDevice> contextMenu = zigbeeDeviceGrid.addContextMenu();
+        //contextMenu.addItem("Edit", event -> event.getItem().ifPresent(d -> editDeviceMapping(d)));
+        //contextMenu.addItem("Clone", event -> event.getItem().ifPresent(d -> cloneDeviceMapping(d)));
+
 //        Grid.Column<ZigbeeDevice> editorColumn = zigbeeDeviceGrid.addComponentColumn(this::createEditButton).setHeader("").setSortable(false);
 
 //        // setup rename (editor)
@@ -118,16 +131,27 @@ public class MainView extends VerticalLayout {
 
     }
 
-    private void zigbeeDeviceDoubleClicked(ItemDoubleClickEvent<ZigbeeDevice> event) {
-        editDeviceMapping(event.getItem());
+    private Component createActionButtons(ZigbeeDevice device) {
+        HorizontalLayout layout = new HorizontalLayout();
+        Optional<Configuration.Mapping> mapping = configurationService.getMapping(device.getFriendlyName());
+        Button button = new Button();
+        if (mapping.isPresent()) {
+            layout.add(new Button("edit", e -> editDeviceMapping(device, mapping.get())));
+            layout.add(new Button("delete", e -> deleteDeviceMapping(device)));
+        } else {
+            layout.add(
+                    new Button("create", e -> editDeviceMapping(device, Configuration.Mapping.builder().zigbeeDeviceName(device.getFriendlyName()).build())));
+        }
+        return layout;
     }
 
-    private void editDeviceMapping(ZigbeeDevice device) {
-        AtomicReference<Configuration.Mapping> mapping = new AtomicReference<>(Configuration.Mapping.builder()
-                .zigbeeDeviceName(device.getFriendlyName())
-                .build());
-        configurationService.getMapping(device.getFriendlyName()).ifPresent(i-> mapping.set(i));
-        ui.navigate(MappingEditView.class).ifPresent(i->i.editMapping(mapping.get()));
+    private void deleteDeviceMapping(ZigbeeDevice device) {
+        configurationService.deleteMapping(device.getFriendlyName());
+        refreshDeviceList();
+    }
+
+    private void editDeviceMapping(ZigbeeDevice device, Configuration.Mapping mapping) {
+        UI.getCurrent().navigate(MappingEditView.class).ifPresent(i -> i.editMapping(device.getFriendlyName(), mapping));
     }
 
 //    private void onStartEditingDevice(EditorOpenEvent<ZigbeeDevice> zigbeeDeviceEditorOpenEvent) {
@@ -150,10 +174,9 @@ public class MainView extends VerticalLayout {
 //        });
 //    }
 
-    private void refreshDeviceList(ClickEvent<Button> buttonClickEvent) {
+    private void refreshDeviceList() {
         zigbeeDeviceGrid.setItems(zigbeeService.getDeviceList());
     }
-
 
 //    private void enableJoin(ClickEvent<Button> buttonClickEvent) {
 //        zigbeeService.enableJoin(true, Integer.parseInt(autoDisableMinutesTextField.getValue()) * 60);
@@ -203,4 +226,3 @@ public class MainView extends VerticalLayout {
     }
 
 }
-

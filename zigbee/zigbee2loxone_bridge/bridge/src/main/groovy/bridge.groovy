@@ -1,6 +1,7 @@
 import com.hivemq.client.mqtt.MqttClient
 import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient
 import com.hivemq.client.mqtt.mqtt3.message.publish.Mqtt3Publish
+import groovy.json.JsonBuilder
 import groovy.json.JsonSlurper
 import groovy.util.logging.Slf4j
 
@@ -28,10 +29,12 @@ class Env {
     static ZIGBEE_VALUES_REFRESH_PERIOD_SEC = 300       // how often ask for data of all zigbee devices
 }
 
-
+@Slf4j
 class Configuration {
     // main app configuration
     def configuration
+    File configFile
+    Long configFileMtime
 
     // helpers to speed up searching for mappings
     def zigbeeDeviceNameToMapping = [:]
@@ -50,19 +53,53 @@ class Configuration {
     }
 
     void load(File configFile) {
-        if(configFile.isFile() && configFile.size() != 0) {
+        log.info("Loading config file $configFile")
+        if (configFile.isFile() && configFile.size() != 0) {
             configuration = new JsonSlurper().parse(configFile)
+            this.configFile = configFile
+            configFileMtime = configFile.lastModified()
         } else {
             configuration = [:]
             configuration.mapping = [:]
         }
+
+        zigbeeDeviceNameToMapping = [:]
+        loxoneTopicToMapping = [:]
         configuration.mapping.each { mapping ->
             zigbeeDeviceNameToMapping.put(mapping.zigbeeDeviceName, mapping)
-            mapping.l2zPayloadMappings?.each { i ->
+            mapping.payloadMapping?.each { i ->
                 def topic = Util.joinTopic(Env.loxoneTopic, i.loxoneComponentName, "/state")
                 loxoneTopicToMapping.put(topic, mapping)
             }
         }
+    }
+
+    void checkConfigFileChange() {
+        if(configFile.lastModified() != configFileMtime) {
+            log.info("Reloading config file due to content changed")
+            load(configFile)
+        }
+    }
+}
+
+class ValueCache {
+    def zigbeeCache = [:]
+    def loxoneCache = [:]
+
+    def rememberZigbeeValue(deviceName, attributeName, value) {
+        zigbeeCache["${deviceName}:${attributeName}"] = value
+    }
+
+    def getZigbeeValue(deviceName, attributeName) {
+        return zigbeeCache["${deviceName}:${attributeName}"]
+    }
+
+    def rememberLoxoneValue(String loxoneComponentName, String value) {
+        loxoneCache[loxoneComponentName] = value
+    }
+
+    def getLoxoneValue(String loxoneComponentName) {
+        return loxoneCache[loxoneComponentName]
     }
 }
 
@@ -90,6 +127,8 @@ class Bridge {
     final jsonSlurper = new JsonSlurper()
     def configuration = new Configuration()
     def engine = new groovy.text.GStringTemplateEngine()
+    def jsonBuilder = new JsonBuilder()
+    private final ValueCache valueCache = new ValueCache()
 
 
     def processLoxoneMqttMessage(Mqtt3Publish mqttMessage) {
@@ -97,7 +136,7 @@ class Bridge {
             if (mqttMessage.payload.isPresent()) {
                 def topic = mqttMessage.topic.toString()
                 def mapping = configuration.getMappingForLoxoneTopic(topic)
-                if (mapping != null && mapping.enabled) {
+                if (mapping != null && mapping.enabled && (mapping.direction == 'BIDIRECTIONAL' || mapping.direction == 'LOXONE_TO_ZIGBEE')) {
                     forwardLoxoneToZigbe(mqttMessage, mapping)
                 }
             }
@@ -112,7 +151,7 @@ class Bridge {
             def zigbeeDeviceName = getZigbeeDeviceName(topic)
             if (topic.endsWith(zigbeeDeviceName)) {
                 def mapping = configuration.getMappingForZigbeeDevice(zigbeeDeviceName)
-                if(mapping != null && mapping.enabled) {
+                if (mapping != null && mapping.enabled && (mapping.direction == 'BIDIRECTIONAL' || mapping.direction == 'ZIGBEE_TO_LOXONE')) {
                     forwardZigbeeToLoxone(mqttMessage, mapping);
                 }
             }
@@ -125,11 +164,10 @@ class Bridge {
     def forwardLoxoneToZigbe(Mqtt3Publish mqttMessage, mapping) {
         def payload = getPayload(mqttMessage)
         mqttCache.storeLoxonePayload(mqttMessage.topic.toString(), payload)
-        mapping.l2zPayloadMappings?.each { m ->
-            def template = engine.createTemplate(m.mappingFormula).make([payload: payload])
-            def zigbeePayload = template.toString()
-            if (zigbeePayload != "null") {
-                sendToZigbeeDevice(mapping.zigbeeDeviceName, zigbeePayload)
+        mapping.payloadMapping?.each { m ->
+            def zigbeeValue = tryApplyFormula(payload[m.loxoneAttributeName], m.mappingFormulaL2Z)
+            if(zigbeeValue != null) {
+                sendToZigbeeDevice(mapping.zigbeeDeviceName, m.zigbeeAttributeName, zigbeeValue.toString())
             }
         }
 
@@ -141,16 +179,16 @@ class Bridge {
         def payload = getPayload(mqttMessage)
         mqttCache.storeZigbeePayload(zigbeeDeviceName, payload)
         // transform and send to zigbee
-        mapping.z2lPayloadMappings?.each { m ->
-            def template = engine.createTemplate(m.mappingFormula).make([payload: payload])
+        mapping.payloadMapping?.each { m ->
+            def loxonePayload = tryApplyFormula(payload[m.zigbeeAttributeName], m.mappingFormulaZ2L)
             try {
-                def loxonePayload = template.toString()
-                if (loxonePayload != "null") {
-                    sendToLoxoneComponent(m.loxoneComponentName, loxonePayload)
+                if(loxonePayload != null) {
+                    sendToLoxoneComponent(m.loxoneComponentName, loxonePayload.toString())
                 }
             } catch (Exception e) {
                 log.error("Failed to send to loxone", e)
             }
+
         }
 
     }
@@ -161,13 +199,23 @@ class Bridge {
         return splt[1]
     }
 
-    def sendToZigbeeDevice(String zigbeeDeviceName, String mqttPayload) {
-        sendMqttMessage("${Env.zigbeeTopic}/${zigbeeDeviceName}/set", mqttPayload)
+    def sendToZigbeeDevice(String zigbeeDeviceName, String zigbeeAttributeName, String value) {
+        // debounce
+        if (value.equals(valueCache.getZigbeeValue(zigbeeDeviceName, zigbeeAttributeName))) {
+            return;
+        }
+        valueCache.rememberZigbeeValue(zigbeeDeviceName, zigbeeAttributeName, value)
+        sendMqttMessage("${Env.zigbeeTopic}/${zigbeeDeviceName}/set", """{"${zigbeeAttributeName}":"${value}"}""")
     }
 
     // for all configured zigbee device mappings, try to get actual data from devices
-    def sendToLoxoneComponent(String loxoneComponentName, String mqttPayload) {
-        sendMqttMessage("${Env.loxoneTopic}/${loxoneComponentName}/cmd", mqttPayload)
+    def sendToLoxoneComponent(String loxoneComponentName, String value) {
+        // debounce
+        if (value.equals(valueCache.getLoxoneValue(loxoneComponentName))) {
+            return;
+        }
+        valueCache.rememberLoxoneValue(loxoneComponentName, value)
+        sendMqttMessage("${Env.loxoneTopic}/${loxoneComponentName}/cmd", value)
     }
 
     def refreshZigbeeData() {
@@ -221,6 +269,10 @@ class Bridge {
         while (true) {
             try {
                 configuration.load(Env.configFile as File)
+                def configReloadTimer = new Timer()
+                configReloadTimer.scheduleAtFixedRate(()->{
+                    configuration.checkConfigFileChange()
+                }, 10000, 10000)
                 connect()
             } catch (Exception e) {
                 log.error("Failed to start bridge, reason: {}", e.toString())
@@ -238,6 +290,18 @@ class Bridge {
             return new String(buffer)
         }
     }
+
+    def tryApplyFormula(value, formula) {
+        if(value == null) {
+            return null
+        }
+        if (formula == null || formula.isEmpty()) {
+            return value
+        }
+        def template = engine.createTemplate(formula).make([value: value])
+        def converted = template.toString()
+        return (converted == null || converted == "null") ? value : converted
+    }
 }
 
 static void main(String[] args) {
@@ -249,5 +313,5 @@ static void main(String[] args) {
 
     // run main loop
     new Bridge().run()
-    }
+}
 

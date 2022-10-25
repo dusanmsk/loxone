@@ -5,11 +5,16 @@ import static java.lang.String.format;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.EvictingQueue;
 import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5Publish;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import javax.annotation.PostConstruct;
@@ -26,12 +31,14 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ZigbeeService {
 
+    private static final int MAX_REMEMBERED_PAYLOADS = 100;
     private final MqttService mqttService;
     private final String ZIGBEE2MQTT_PREFIX = "zigbee"; // todo dusan.zatkovsky configuration
     private Set<MqttMessageListener> zigbeeDeviceMessageListeners = new HashSet<>();
     private List<ZigbeeDevice> devices = new ArrayList<>();
     private Long joinDisableDateTimeEpochMs = 0L;
     private BridgeConfig bridgeConfig;
+    private Map<String, EvictingQueue<String>> zigbeePayloads = new HashMap<>();        // zigbeeDeviceName: payloads
 
     @PostConstruct
     void init() throws ExecutionException, InterruptedException {
@@ -64,7 +71,12 @@ public class ZigbeeService {
         String topic = mqttMessage.getTopic().toString();
         String deviceName = topic.split("/")[1];
         log.debug("Dispatching zigbee device message to {} listeners", zigbeeDeviceMessageListeners.size());
-        zigbeeDeviceMessageListeners.forEach(l -> l.processMessage(deviceName, mqttMessage.getPayloadAsBytes()));
+        byte[] payloadBytes = mqttMessage.getPayloadAsBytes();
+        zigbeeDeviceMessageListeners.forEach(l -> l.processMessage(deviceName,payloadBytes));
+        if(!zigbeePayloads.containsKey(deviceName)) {
+            zigbeePayloads.put(deviceName, EvictingQueue.create(MAX_REMEMBERED_PAYLOADS));
+        }
+        zigbeePayloads.get(deviceName).add(new String(payloadBytes));
     }
 
 
@@ -146,6 +158,21 @@ public class ZigbeeService {
 
     public long getJoinTimeout() {
         return joinDisableDateTimeEpochMs;
+    }
+
+    public Collection<String> getKnownAttributeNames(String zigbeeDeviceName) {
+        // todo dusan.zatkovsky
+        return Collections.emptySet();
+    }
+
+    public void send(String zigbeeDeviceName, String attributeName, String value) {
+        String topic = String.format("zigbee/%s/set", zigbeeDeviceName).replaceAll("//", "/");
+        String payload = String.format("{\"%s\":\"%s\"}", attributeName, value);
+        mqttService.publish(topic, payload);
+    }
+
+    public Collection<String> getPayloadSamples(String zigbeeDeviceName) {
+        return zigbeePayloads.getOrDefault(zigbeeDeviceName, EvictingQueue.create(1));
     }
 
     public interface MqttMessageListener {

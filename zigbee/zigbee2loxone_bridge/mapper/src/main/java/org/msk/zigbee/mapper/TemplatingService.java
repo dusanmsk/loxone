@@ -1,4 +1,4 @@
-package org.msk.zigbee;
+package org.msk.zigbee.mapper;
 
 import groovy.lang.GroovyShell;
 import groovy.lang.Script;
@@ -12,10 +12,11 @@ public class TemplatingService {
 
     static {
         groovyScript = new GroovyShell().parse("""
-                def translate(mappingFormula, payloadString) {
+                def translate(mappingFormula, payloadString, attributeName) {
                     def engine = new groovy.text.GStringTemplateEngine()
                     def payload =  new groovy.json.JsonSlurper().parse(payloadString)
-                    def template = engine.createTemplate(mappingFormula).make([payload: payload])
+                    def value = payload[attributeName]
+                    def template = engine.createTemplate(mappingFormula).make([value: value])
                     return template.toString()
                 }
                 """);
@@ -23,7 +24,7 @@ public class TemplatingService {
 
     private static final Script groovyScript;
 
-    public String processTemplate(String template, String payload) {
-        return groovyScript.invokeMethod("translate", new Object[] {template, payload.getBytes(StandardCharsets.UTF_8)}).toString();
+    public String processTemplate(String template, String payload, String attributeName) {
+        return groovyScript.invokeMethod("translate", new Object[] {template, payload.getBytes(StandardCharsets.UTF_8), attributeName}).toString();
     }
 }
