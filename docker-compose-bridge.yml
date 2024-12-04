@@ -4,7 +4,7 @@ services:
 
   # loxone -> mqtt uses loxone web interface to get value changes
   loxone2mqtt:
-    build: bridge/loxone2mqtt
+    build: bridge/loxone2mqtt_gen1
     restart: unless-stopped
     env_file:
       - config

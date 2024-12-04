@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dropdown Example</title>
+</head>
+<body>
+   <h1>Select an option</h1>
+<form method="POST">
+    <input type="text" name="filter_text" placeholder="Filter options">
+    <button type="submit" name="filter">Filter</button>
+    <table>
+        <tr><th>Select all</th></th><th><input type="checkbox" id="select_all"></th></tr>
+        <tr>
+            <th>Select</th>
+            <th>Option</th>
+        </tr>
+        {% for option in options %}
+        <tr>
+            <td>
+                <input type="checkbox" name="dropdown" value="{{ option }}">
+            </td>
+            <td>{{ option }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <button type="submit">Select</button>
+</form>
+<script>
+    document.getElementById('select_all').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('input[name="dropdown"]');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+    });
+</script>
+</body>
+</html>
